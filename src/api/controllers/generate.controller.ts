@@ -12,6 +12,9 @@ export const GenerateBodySchema = z.object({
   prompt: z.string().min(1),
   inputImageUrl: z.string().url().optional(),
   mode: z.enum(['draft', 'final']).optional(),
+  resolution: z.enum(['1K', '2K']).optional(),
+  aspectRatio: z.enum(['1:1', '9:16', '16:9', '4:3', '3:2', '2:3', '5:4', '4:5', '21:9']).optional(),
+  sampleCount: z.number().min(1).max(10).int().optional(),
 });
 
 export const GenerateParamsSchema = z.object({
@@ -43,6 +46,9 @@ export async function generate(req: Request, res: Response): Promise<void> {
     prompt: body.prompt,
     inputImageUrl: body.inputImageUrl,
     mode: body.mode || 'final',
+    resolution: body.resolution || '1K',
+    aspectRatio: body.aspectRatio || '1:1',
+    sampleCount: body.sampleCount || 1,
   });
 
   // If job already existed (idempotency), return it

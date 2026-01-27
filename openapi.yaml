@@ -19,7 +19,7 @@ info:
 servers:
   - url: https://api.yourdomain.com
     description: Production server
-  - url: http://localhost:3000
+  - url: http://localhost:3001
     description: Local development server
 
 paths:
@@ -93,7 +93,7 @@ paths:
           application/json:
             schema:
               type: object
-              required:
+               required:
                 - prompt
               properties:
                 prompt:
@@ -113,6 +113,22 @@ paths:
                     draft: Faster, lower quality
                     final: High quality (default)
                   default: final
+                resolution:
+                  type: string
+                  enum: [1K, 2K]
+                  description: Image resolution (1K=1024x1024, 2K=2048x2048)
+                  default: 1K
+                aspectRatio:
+                  type: string
+                  enum: [1:1, 9:16, 16:9, 4:3, 3:2, 2:3, 5:4, 4:5, 21:9]
+                  description: Image aspect ratio
+                  default: 1:1
+                sampleCount:
+                  type: integer
+                  minimum: 1
+                  maximum: 10
+                  description: Number of images to generate
+                  default: 1
       responses:
         '202':
           description: Job accepted and queued

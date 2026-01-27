@@ -370,6 +370,31 @@
                         required: false
                     },
                     {
+                        name: 'resolution',
+                        type: 'select',
+                        label: 'Resolution',
+                        options: ['1K', '2K'],
+                        default: '1K',
+                        required: false
+                    },
+                    {
+                        name: 'aspectRatio',
+                        type: 'select',
+                        label: 'Aspect Ratio',
+                        options: ['1:1', '9:16', '16:9', '4:3', '3:2', '2:3', '5:4', '4:5', '21:9'],
+                        default: '1:1',
+                        required: false
+                    },
+                    {
+                        name: 'sampleCount',
+                        type: 'number',
+                        label: 'Sample Count (1-10)',
+                        default: 1,
+                        required: false,
+                        min: 1,
+                        max: 10
+                    },
+                    {
                         name: 'Idempotency-Key',
                         type: 'text',
                         label: 'Idempotency Key (header)',
@@ -380,7 +405,10 @@
                 ],
                 exampleRequest: {
                     prompt: "A cute cat sitting on a couch",
-                    mode: "draft"
+                    mode: "draft",
+                    resolution: "1K",
+                    aspectRatio: "16:9",
+                    sampleCount: 2
                 },
                 exampleResponse: {
                     jobId: "clx1234567890",

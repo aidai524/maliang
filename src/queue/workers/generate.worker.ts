@@ -60,12 +60,18 @@ export const generateWorker = new Worker<GenerateJobData>(
     let keyConcLimit = 0;
 
     try {
-      // ========== PICK PROVIDER KEY ==========
-      const providerKey = await pickProviderKey('gemini');
+    // ========== PICK PROVIDER KEY ==========
+    const providerKey = await pickProviderKey('gemini');
 
-      if (!providerKey) {
-        throw new Error('NO_PROVIDER_KEY_AVAILABLE');
-      }
+    if (!providerKey) {
+      logger.error('No provider key available', {
+        provider: 'gemini',
+        error: 'NO_PROVIDER_KEY_AVAILABLE',
+        tenantId: dbJob.tenantId,
+        jobId: dbJob.id,
+      });
+      throw new ProviderKeyError('NO_PROVIDER_KEY_AVAILABLE');
+    }
 
       keyConcKey = `lim:key:${providerKey.id}:inflight`;
       keyConcLimit = providerKey.conc;
@@ -115,56 +121,6 @@ export const generateWorker = new Worker<GenerateJobData>(
         jobId,
         mode: dbJob.mode,
         promptLength: dbJob.prompt.length,
-      });
-
-      const result = await geminiGenerate({
-        apiKey: providerKey.secret,
-        prompt: dbJob.prompt,
-        inputImageUrl: dbJob.inputImageUrl,
-        mode: dbJob.mode as 'draft' | 'final',
-        resolution: dbJob.resolution as '1:1' | '4:3',
-        aspectRatio: dbJob.aspectRatio as '1:1' | '9:16' | '16:9' | '4:3' | '3:2' | '2:3' | '5:4' | '4:5' | '21:9',
-        sampleCount: dbJob.sampleCount || 1,
-      });
-
-      const result = await geminiGenerate({
-        apiKey: providerKey.secret,
-        prompt: dbJob.prompt,
-        inputImageUrl: dbJob.inputImage,
-        mode: dbJob.mode as 'draft' | 'final',
-        resolution: dbJob.resolution,
-        aspectRatio: dbJob.aspectRatio,
-        sampleCount: dbJob.sampleCount,
-      });
-
-      const result = await geminiGenerate({
-        apiKey: providerKey.secret,
-        prompt: dbJob.prompt,
-        inputImageUrl: dbJob.inputImage ?? undefined,
-        mode: dbJob.mode as 'draft' | 'final',
-        resolution: dbJob.resolution,
-        aspectRatio: dbJob.aspectRatio,
-        sampleCount: dbJob.sampleCount,
-      });
-
-      const result = await geminiGenerate({
-        apiKey: providerKey.secret,
-        prompt: dbJob.prompt,
-        inputImageUrl: dbJob.inputImage,
-        mode: dbJob.mode as 'draft' | 'final',
-        resolution: dbJob.resolution,
-        aspectRatio: dbJob.aspectRatio,
-        sampleCount: dbJob.sampleCount,
-      });
-
-      const result = await geminiGenerate({
-        apiKey: providerKey.secret,
-        prompt: dbJob.prompt,
-        inputImageUrl: dbJob.inputImage,
-        mode: dbJob.mode as 'draft' | 'final',
-        resolution: dbJob.resolution as '1:1' | '4:3',
-        aspectRatio: dbJob.aspectRatio as '1:1' | '9:16' | '16:9' | '4:3' | '3:2' | '2:3' | '5:4' | '4:5' | '21:9',
-        sampleCount: dbJob.sampleCount || 1,
       });
 
       const result = await geminiGenerate({

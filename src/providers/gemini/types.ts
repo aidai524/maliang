@@ -4,7 +4,7 @@
 
 export type GeminiMode = 'draft' | 'final';
 
-export type GeminiResolution = '1:1' | '4:3';
+export type GeminiResolution = '1K' | '2K';
 
 export type GeminiAspectRatios = '1:1' | '9:16' | '16:9' | '4:3' | '3:2' | '2:3' | '5:4' | '4:5' | '21:9';
 
@@ -23,8 +23,7 @@ export type GeminiSubmitResult = {
 };
 
 export type GeminiStatusResult =
-  | { status: 'PENDING' | 'RUNNING' }
-  | { status: 'SUCCEEDED'; images: Array<{ url: string; mimeType: string }> }
+  | { status: 'PENDING' | 'RUNNING' | 'SUCCEEDED'; images: Array<{ url: string; mimeType: string }> }
   | { status: 'FAILED'; error: string };
 
 export type GenerationConfig = {
@@ -32,6 +31,9 @@ export type GenerationConfig = {
   topK?: number;
   topP?: number;
   maxOutputTokens?: number;
+  imageSize?: '1K' | '2K';
+  aspectRatio?: string;
+  numberOfImages?: number;
 };
 
 export type GeminiPart =

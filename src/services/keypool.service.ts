@@ -83,7 +83,12 @@ export async function pickProviderKey(provider: string): Promise<PickedKey | nul
   }
 
   if (!candidates.length) {
-    logger.warn('No available keys (all in cooldown or at limit)', { provider });
+    logger.error('No available keys (all in cooldown or at limit)', { 
+      provider,
+      totalKeys: keys.length,
+      inCooldown: keys.filter(k => health?.available !== true).length,
+      atLimit: keys.filter(k => inFlight >= k.concurrencyLimit).length,
+    });
     return null;
   }
 

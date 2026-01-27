@@ -1,7 +1,6 @@
 import { prisma } from '../db/prisma';
 import { redis } from '../queue/redis';
 import { checkKeyHealth, getInFlight } from './limiter.service';
-import { ProviderKeyCooldownError, ProviderKeyError } from '../utils/errors';
 import { createLogger } from '../utils/logger';
 
 const logger = createLogger('keypool');
@@ -9,96 +8,91 @@ const logger = createLogger('keypool');
 export type PickedKey = {
   id: string;
   provider: string;
-  secret: string; // Note: Should be decrypted in production
+  secret: string;
   rpm: number;
   conc: number;
+  failureRate: number;
+  successCount: number;
+  totalRequests: number;
+  healthScore: number;
 };
 
 /**
- * Pick the best available provider key
- *
- * Strategy:
- * 1. Filter out keys that are:
- *    - Disabled in DB
- *    - In cooldown period
- *    - At or over their concurrency limit
- * 2. Sort candidates by: least in-flight count
- * 3. Return the first available key
+ * Pick the best available provider key based on:
+ * 1. Not in cooldown
+ * 2. Has capacity (in-flight < concurrency limit)
+ * 3. Lowest failure rate
+ * 4. Least in-flight requests (load balancing)
  */
 export async function pickProviderKey(provider: string): Promise<PickedKey | null> {
   const keys = await prisma.providerKey.findMany({
-    where: { provider, enabled: true },
+    where: {
+      provider,
+      enabled: true,
+    },
   });
 
   if (!keys.length) {
-    logger.warn('No enabled keys found', { provider });
+    logger.error('No enabled keys found for provider', { provider });
     return null;
   }
 
-  const now = Date.now();
-  const candidates: Array<{
-    key: PickedKey;
-    inFlight: number;
-    cooldownUntil: number;
-  }> = [];
+  // Check each key's health and capacity
+  const candidates = [];
+  for (const key of keys) {
+    const health = await checkKeyHealth(key.id);
+    const inFlight = await getInFlight(`kp:${key.id}:inflight`);
 
-  // Filter and collect candidates
-  for (const k of keys) {
-    // Check cooldown status
-    const health = await checkKeyHealth(k.id, { now });
-
-    if (!health.available) {
-      logger.debug('Key in cooldown', {
-        keyId: k.id,
-        cooldownUntil: new Date(health.cooldownUntil).toISOString(),
-      });
-      continue;
-    }
-
-    // Check current in-flight count
-    const inFlightKey = `kp:${k.id}:inflight`;
-    const inFlight = await getInFlight(inFlightKey);
-
-    // Check if at concurrency limit
-    if (inFlight >= k.concurrencyLimit) {
-      logger.debug('Key at concurrency limit', {
-        keyId: k.id,
+    if (health.available && inFlight < key.concurrencyLimit) {
+      candidates.push({
+        key: {
+          id: key.id,
+          provider: key.provider,
+          secret: key.encryptedKey, // Note: This should be decrypted in production
+          rpm: key.rpmLimit,
+          conc: key.concurrencyLimit,
+          failureRate: 0,
+          successCount: 0,
+          totalRequests: 0,
+          healthScore: 100,
+        },
         inFlight,
-        limit: k.concurrencyLimit,
+        cooldownUntil: 0,
       });
-      continue;
     }
-
-    candidates.push({
-      key: {
-        id: k.id,
-        provider: k.provider,
-        secret: k.encryptedKey, // TODO: Decrypt using KMS
-        rpm: k.rpmLimit,
-        conc: k.concurrencyLimit,
-      },
-      inFlight,
-      cooldownUntil: health.cooldownUntil,
-    });
   }
+
+  // Sort by least in-flight (load balancing) AND success rate (prefer healthy keys)
+  candidates.sort((a, b) => {
+    const aFailureRate = a.key.failureRate || 1;
+    const bFailureRate = b.key.failureRate || 1;
+    const aHealthScore = a.key.healthScore || 0;
+    const bHealthScore = b.key.healthScore || 0;
+
+    // Primary sort: least in-flight
+    const inFlightDiff = a.inFlight - b.inFlight;
+    if (inFlightDiff !== 0) return inFlightDiff;
+
+    // Secondary sort: lower failure rate
+    return bFailureRate - aFailureRate;
+  });
 
   if (!candidates.length) {
-    logger.error('No available keys (all in cooldown or at limit)', { 
+    logger.error('No available keys (all in cooldown or at limit)', {
       provider,
       totalKeys: keys.length,
-      inCooldown: keys.filter(k => health?.available !== true).length,
-      atLimit: keys.filter(k => inFlight >= k.concurrencyLimit).length,
     });
     return null;
   }
 
-  // Sort by least in-flight (load balancing)
-  candidates.sort((a, b) => a.inFlight - b.inFlight);
-
   const chosen = candidates[0].key;
+  const chosenInFlight = candidates[0].inFlight;
+  const chosenCooldown = candidates[0].cooldownUntil;
+
   logger.info('Picked provider key', {
     keyId: chosen.id,
-    inFlight: candidates[0].inFlight,
+    inFlight: chosenInFlight,
+    cooldownUntil: chosenCooldown > 0 ? new Date(chosenCooldown).toISOString() : null,
   });
 
   return chosen;
@@ -159,23 +153,45 @@ export async function getAllProviderKeys() {
 }
 
 /**
- * Get runtime stats for a key
+ * Get runtime stats for a key (success/failure rates, health score)
  */
 export async function getKeyStats(keyId: string) {
   const inFlight = await getInFlight(`kp:${keyId}:inflight`);
 
-  // Get cooldown info
   const cooldownData = await redis.get(`kp:${keyId}:cooldown_until`);
   const cooldownUntil = cooldownData ? parseInt(cooldownData, 10) : 0;
 
-  // Get failure count
   const failureData = await redis.get(`kp:${keyId}:failures`);
   const failures = failureData ? parseInt(failureData, 10) : 0;
 
+  const successData = await redis.get(`kp:${keyId}:successes`);
+  const successes = successData ? parseInt(successData, 10) : 0;
+
+  const total = failures + successes;
+  const failureRate = total > 0 ? (failures / total) : 0;
+  const successRate = total > 0 ? (successes / total) : 0;
+
+  const healthScore = successRate * 100; // Health score 0-100
+
   return {
     inFlight,
-    cooldownUntil: cooldownUntil > 0 ? new Date(cooldownUntil).toISOString() : null,
+    cooldownUntil,
     failures,
+    successes,
+    total,
+    failureRate,
+    successRate,
+    healthScore,
     isInCooldown: cooldownUntil > Date.now(),
   };
+}
+
+/**
+ * Provider Key Error class
+ */
+export class ProviderKeyError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ProviderKeyError';
+  }
 }

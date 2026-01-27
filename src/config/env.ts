@@ -26,7 +26,9 @@ const envSchema = z.object({
   GEMINI_API_KEY_1: z.string().optional(),
   GEMINI_API_KEY_2: z.string().optional(),
   GEMINI_API_BASE: z.string().default('https://generativelanguage.googleapis.com'),
-  GEMINI_MODEL: z.string().default('gemini-3.0-pro-vision'),
+  GEMINI_MODEL: z.string().default('gemini-3-pro-image-preview'),
+  GEMINI_FALLBACK_MODEL: z.string().default('gemini-2.5-flash-image-preview'),
+  GEMINI_ENABLE_FALLBACK: z.string().default('true'),
 
   // Rate limits
   GLOBAL_RPM_LIMIT: z.string().default('1000'),

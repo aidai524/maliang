@@ -2,7 +2,7 @@ import { Worker, Job } from 'bullmq';
 import { connection } from '../redis';
 import { QUEUE_GENERATE } from '../queues';
 import { prisma } from '../../db/prisma';
-import { pickProviderKey, markKeySuccess, markKeyFailure } from '../../services/keypool.service';
+import { pickProviderKey, markKeySuccess, markKeyFailure, ProviderKeyError } from '../../services/keypool.service';
 import { acquireRpm, acquireConcurrency, releaseConcurrency } from '../../services/limiter.service';
 import { putImage } from '../../services/storage.service';
 import { markJobRunning, markJobSucceeded, markJobFailed, updateProviderRequestId, appendJobResultUrl } from '../../services/job.service';
@@ -11,6 +11,7 @@ import { config } from '../../config/env';
 import { webhookQueue } from '../bull';
 import { isRetryableError, getErrorMessage } from '../../utils/errors';
 import { createLogger } from '../../utils/logger';
+import { checkCache, saveToCache } from '../../services/request-cache.service';
 
 const logger = createLogger('generate.worker');
 
@@ -116,8 +117,55 @@ export const generateWorker = new Worker<GenerateJobData>(
       // ========== MARK JOB AS RUNNING ==========
       await markJobRunning(dbJob.id, providerKey.id);
 
+      // ========== CHECK CACHE ==========
+      const cachedImages = await checkCache(dbJob.prompt, {
+        mode: dbJob.mode,
+        resolution: dbJob.resolution as '1K' | '2K' | undefined,
+        aspectRatio: dbJob.aspectRatio as string | undefined,
+        sampleCount: dbJob.sampleCount ?? undefined,
+      });
+
+      if (cachedImages && cachedImages.length > 0) {
+        logger.info('Using cached images', {
+          jobId,
+          count: cachedImages.length,
+        });
+
+        // 直接使用缓存结果，跳过 API 调用
+        for (const url of cachedImages) {
+          await appendJobResultUrl(dbJob.id, url);
+        }
+
+        // 标记任务成功
+        await markJobSucceeded(dbJob.id, cachedImages);
+        await markKeySuccess(providerKey.id);
+
+        logger.info('Job completed from cache', { jobId, urls: cachedImages });
+
+        // 如果配置了 webhook，触发通知
+        if (tenant.webhookEnabled && tenant.webhookUrl && tenant.webhookSecret) {
+          await webhookQueue.add(
+            'send',
+            {
+              tenantId: tenant.id,
+              jobId: dbJob.id,
+            },
+            {
+              attempts: 8,
+              backoff: {
+                type: 'exponential',
+                delay: 2000,
+              },
+            }
+          );
+          logger.info('Webhook queued (from cache)', { jobId, tenantId: tenant.id });
+        }
+
+        return; // 缓存命中，直接返回
+      }
+
       // ========== CALL PROVIDER ==========
-      logger.info('Calling Gemini API', {
+      logger.info('Cache miss, calling Gemini API', {
         jobId,
         mode: dbJob.mode,
         promptLength: dbJob.prompt.length,
@@ -128,6 +176,13 @@ export const generateWorker = new Worker<GenerateJobData>(
         prompt: dbJob.prompt,
         inputImageUrl: dbJob.inputImageUrl ?? undefined,
         mode: dbJob.mode as 'draft' | 'final',
+        resolution: dbJob.resolution as '1K' | '2K' | undefined,
+        aspectRatio: dbJob.aspectRatio as '1:1' | '9:16' | '16:9' | '4:3' | '3:2' | '2:3' | '5:4' | '4:5' | '21:9' | undefined,
+        sampleCount: dbJob.sampleCount ?? undefined,
+      }, {
+        maxAttempts: 60,
+        intervalMs: 3000,
+        enableFallback: true,
       });
 
       // ========== PROCESS RESULT ==========
@@ -166,6 +221,15 @@ export const generateWorker = new Worker<GenerateJobData>(
         jobId,
         count: resultUrls.length,
         storageType: config.storage.type,
+      });
+
+      // ========== SAVE TO CACHE ==========
+      await saveToCache(dbJob.prompt, resultUrls, {
+        mode: dbJob.mode,
+        resolution: dbJob.resolution as '1K' | '2K' | undefined,
+        aspectRatio: dbJob.aspectRatio as string | undefined,
+        sampleCount: dbJob.sampleCount ?? undefined,
+        model: result.model || 'gemini-2.0-flash-exp',
       });
 
       // ========== MARK JOB AS SUCCEEDED ==========
@@ -285,6 +349,7 @@ generateWorker.on('failed', (job, error) => {
   }
 });
 
+// ========== 智能退避重试策略 ==========n// 针对503错误使用指数退避，其他错误使用固定延迟nfunction getRetryDelay(attempt: number, errorCode: string): number {n  // 503错误 - 指数退避：2^attempt * 1000毫秒，最多60秒n  if (errorCode === 'GEMINI_ERROR' || errorCode.includes('503')) {n    const delay = Math.min(Math.pow(2, attempt) * 1000, 60000);n    logger.info('Using exponential backoff for 503', { attempt, delay: delay / 1000 });n    return delay;n  }n  n  // 其他错误 - 固定3秒延迟n  return 3000;n}n
 function getErrorCode(message: string): string {
   if (message.includes('GLOBAL_RATE_LIMIT')) return 'GLOBAL_RATE_LIMIT';
   if (message.includes('GLOBAL_CONC_LIMIT')) return 'GLOBAL_CONC_LIMIT';

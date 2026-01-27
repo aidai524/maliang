@@ -46,7 +46,7 @@ export class ProviderError extends AppError {
 
 export class ProviderKeyError extends AppError {
   constructor(message: string = 'No provider key available') {
-    super(message, 'NO_PROVIDER_KEY', 503, true);
+    super(message, 'NO_PROVIDER_KEY_AVAILABLE', 503, true);
     this.name = 'ProviderKeyError';
   }
 }

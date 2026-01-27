@@ -1,0 +1,83 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Tenant {
+  id               String   @id @default(cuid())
+  name             String
+  apiKeyHash       String   @unique
+  planRpm          Int      @default(60)
+  planConcurrency  Int      @default(5)
+
+  webhookUrl       String?
+  webhookSecret    String?
+  webhookEnabled   Boolean  @default(false)
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  jobs             Job[]
+}
+
+model ProviderKey {
+  id               String   @id @default(cuid())
+  provider         String   // "gemini" / "nanobanana"
+  encryptedKey     String
+  rpmLimit         Int      @default(60)
+  concurrencyLimit Int      @default(2)
+  enabled          Boolean  @default(true)
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+  model Job {
+  id                String   @id @default(cuid())
+  tenantId          String
+  tenant            Tenant   @relation(fields: [tenantId], references: [id])
+
+  idempotencyKey    String?
+  status            String   @default("QUEUED") // QUEUED/RUNNING/SUCCEEDED/FAILED/RETRYING/CANCELED
+  mode              String   @default("final")  // draft/final
+
+  prompt            String
+  inputImageUrl     String?  // 参考图（若有）
+  resultUrls        Json?
+  errorCode         String?
+  errorMessage      String?
+
+  attempts          Int      @default(0)
+  maxAttempts       Int      @default(4)
+
+  provider          String   @default("gemini")
+  providerKeyId     String?
+  providerRequestId String?  // Gemini async operation name/id
+
+  resolution       String?   @default("1:1") // 1:1(1K) 或 4:3(4K)
+  aspectRatio       String?   @default("1:1")  // 1:1, 9:16, 16:9, 4:3, 3:2, 2:3, 5:4, 4:5, 21:9
+  sampleCount       Int?   @default(1)  // 生成张数，默认1张
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, status])
+  @@index([status, createdAt])
+  @@index([providerRequestId])
+}
+
+model JobEvent {
+  id        String   @id @default(cuid())
+  jobId     String
+  status    String
+  message   String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([jobId, createdAt])
+}

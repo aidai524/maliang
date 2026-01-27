@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__web-reader__webReader",
+      "mcp__web-search-prime__webSearchPrime",
+      "Bash(npm install:*)",
+      "Bash(docker compose:*)",
+      "Bash(npx prisma generate:*)",
+      "Bash(npx prisma migrate dev:*)",
+      "Bash(npx ts-node:*)",
+      "Bash(npm run dev)",
+      "Bash(lsof:*)",
+      "Bash(xargs kill:*)",
+      "Bash(curl:*)",
+      "Bash(node:*)",
+      "Bash(docker exec:*)",
+      "Bash(xargs:*)",
+      "Bash(find:*)",
+      "Bash(npm run build:*)",
+      "Bash(redis-cli:*)",
+      "Bash(pg_isready:*)",
+      "Bash(npx prisma migrate status:*)",
+      "Bash(npm run init:*)",
+      "Bash(python3:*)"
+    ]
+  }
+}

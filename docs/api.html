@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image SaaS API Documentation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f5f5f5;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px 20px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+
+        .config-bar {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .config-bar label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #555;
+        }
+
+        .config-bar input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        .config-bar input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .api-section {
+            background: white;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .api-header {
+            padding: 20px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #e0e0e0;
+            transition: background-color 0.3s;
+        }
+
+        .api-header:hover {
+            background-color: #f8f9fa;
+        }
+
+        .method {
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-weight: 600;
+            font-size: 12px;
+            color: white;
+            margin-right: 12px;
+            min-width: 60px;
+            text-align: center;
+        }
+
+        .method.get { background-color: #61affe; }
+        .method.post { background-color: #49cc90; }
+        .method.put { background-color: #fca130; }
+        .method.delete { background-color: #f93e3e; }
+
+        .api-path {
+            font-family: 'Courier New', monospace;
+            font-size: 16px;
+            color: #333;
+            flex: 1;
+        }
+
+        .api-title {
+            font-weight: 600;
+            color: #667eea;
+        }
+
+        .toggle-icon {
+            transition: transform 0.3s;
+            font-size: 20px;
+        }
+
+        .api-content {
+            display: none;
+            padding: 20px;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .api-content.active {
+            display: block;
+        }
+
+        .description {
+            color: #666;
+            margin-bottom: 20px;
+            line-height: 1.8;
+        }
+
+        .request-section,
+        .response-section {
+            margin-bottom: 20px;
+        }
+
+        .section-title {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 10px;
+            padding-bottom: 5px;
+            border-bottom: 2px solid #667eea;
+            display: inline-block;
+        }
+
+        .param-group {
+            margin-bottom: 15px;
+        }
+
+        .param-label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #555;
+        }
+
+        .param-input {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            transition: border-color 0.3s;
+        }
+
+        .param-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .param-input[readonly] {
+            background-color: #f8f9fa;
+            border-color: #e0e0e0;
+        }
+
+        .param-select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        .param-select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .response-box {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            overflow-x: auto;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+
+        .status-badge.success { background-color: #49cc90; color: white; }
+        .status-badge.error { background-color: #f93e3e; color: white; }
+        .status-badge.loading { background-color: #fca130; color: white; }
+
+        .example-section {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 15px;
+            border-left: 4px solid #667eea;
+        }
+
+        .example-title {
+            font-weight: 600;
+            color: #555;
+            margin-bottom: 10px;
+        }
+
+        .example-code {
+            background: white;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            color: #333;
+            overflow-x: auto;
+        }
+
+        .note {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 12px;
+            margin-top: 15px;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+
+        .note strong {
+            color: #856404;
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 1.8em;
+            }
+
+            .api-header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .method {
+                margin-bottom: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎨 Image SaaS API</h1>
+            <p>异步图片生成服务 - 支持 Gemini/Nano Banana 模型</p>
+        </div>
+
+        <div class="config-bar">
+            <label>API Base URL</label>
+            <input type="text" id="apiBaseUrl" value="http://localhost:3001" placeholder="http://localhost:3001">
+        </div>
+
+        <div class="config-bar">
+            <label>API Key (Bearer Token)</label>
+            <input type="text" id="apiKey" value="img_test_dev_123456789" placeholder="Your API Key">
+        </div>
+
+        <div id="apiContainer"></div>
+    </div>
+
+    <script>
+        const apiSpecs = [
+            {
+                method: 'GET',
+                path: '/health',
+                title: 'Health Check',
+                description: '检查 API 服务是否正常运行，不需要认证。',
+                params: [],
+                exampleResponse: {
+                    status: "ok",
+                    timestamp: "2026-01-26T10:00:00.000Z"
+                }
+            },
+            {
+                method: 'POST',
+                path: '/v1/images/generate',
+                title: 'Submit Image Generation',
+                description: '提交一个新的图片生成任务。任务将异步处理，结果可以通过轮询或 Webhook 回调获取。',
+                params: [
+                    {
+                        name: 'prompt',
+                        type: 'text',
+                        label: 'Prompt (required)',
+                        placeholder: 'A photorealistic cat sitting on a couch',
+                        required: true
+                    },
+                    {
+                        name: 'mode',
+                        type: 'select',
+                        label: 'Mode',
+                        options: ['draft', 'final'],
+                        default: 'draft',
+                        required: false
+                    },
+                    {
+                        name: 'inputImageUrl',
+                        type: 'text',
+                        label: 'Input Image URL (optional)',
+                        placeholder: 'https://example.com/reference.png',
+                        required: false
+                    },
+                    {
+                        name: 'Idempotency-Key',
+                        type: 'text',
+                        label: 'Idempotency Key (header)',
+                        placeholder: 'client-request-id-12345',
+                        required: false,
+                        isHeader: true
+                    }
+                ],
+                exampleRequest: {
+                    prompt: "A cute cat sitting on a couch",
+                    mode: "draft"
+                },
+                exampleResponse: {
+                    jobId: "clx1234567890",
+                    status: "QUEUED"
+                }
+            },
+            {
+                method: 'GET',
+                path: '/v1/jobs',
+                title: 'List Jobs',
+                description: '列出当前租户的所有任务，支持按状态过滤和分页查询。',
+                params: [
+                    {
+                        name: 'status',
+                        type: 'select',
+                        label: 'Status Filter',
+                        options: ['', 'QUEUED', 'RUNNING', 'SUCCEEDED', 'FAILED', 'RETRYING', 'CANCELED'],
+                        default: '',
+                        required: false
+                    },
+                    {
+                        name: 'limit',
+                        type: 'number',
+                        label: 'Limit (1-100)',
+                        placeholder: '50',
+                        default: '50',
+                        required: false
+                    }
+                ],
+                exampleResponse: {
+                    items: [
+                        {
+                            id: "clx1234567890",
+                            status: "SUCCEEDED",
+                            prompt: "A cute cat",
+                            mode: "draft",
+                            resultUrls: ["https://cdn.example.com/image1.png"],
+                            createdAt: "2026-01-26T10:00:00.000Z",
+                            updatedAt: "2026-01-26T10:00:05.000Z"
+                        }
+                    ],
+                    hasMore: false
+                }
+            },
+            {
+                method: 'GET',
+                path: '/v1/jobs/{jobId}',
+                title: 'Get Job Status',
+                description: '获取特定任务的详细状态和结果。可以轮询此端点来检查任务进度。',
+                params: [
+                    {
+                        name: 'jobId',
+                        type: 'text',
+                        label: 'Job ID',
+                        placeholder: 'clx1234567890',
+                        required: true,
+                        isPathParam: true
+                    }
+                ],
+                exampleResponse: {
+                    jobId: "clx1234567890",
+                    status: "SUCCEEDED",
+                    resultUrls: ["https://cdn.example.com/image1.png"],
+                    error: null,
+                    createdAt: "2026-01-26T10:00:00.000Z",
+                    updatedAt: "2026-01-26T10:00:05.000Z"
+                }
+            },
+            {
+                method: 'DELETE',
+                path: '/v1/jobs/{jobId}',
+                title: 'Cancel Job',
+                description: '取消一个任务。只有 QUEUED 或 RETRYING 状态的任务可以被取消。',
+                params: [
+                    {
+                        name: 'jobId',
+                        type: 'text',
+                        label: 'Job ID',
+                        placeholder: 'clx1234567890',
+                        required: true,
+                        isPathParam: true
+                    }
+                ],
+                exampleResponse: {
+                    jobId: "clx1234567890",
+                    status: "CANCELED"
+                }
+            }
+        ];
+
+        function renderApiSection(spec, index) {
+            const methodClass = spec.method.toLowerCase();
+            
+            let paramsHtml = '';
+            spec.params.forEach(param => {
+                let inputHtml = '';
+                
+                if (param.type === 'select') {
+                    const options = param.options.map(opt => 
+                        `<option value="${opt}" ${opt === param.default ? 'selected' : ''}>${opt || 'All'}</option>`
+                    ).join('');
+                    inputHtml = `<select class="param-select" id="param-${index}-${param.name}" ${param.required ? 'required' : ''}>${options}</select>`;
+                } else {
+                    inputHtml = `<input type="${param.type}" class="param-input" id="param-${index}-${param.name}" placeholder="${param.placeholder}" ${param.required ? 'required' : ''}>`;
+                }
+                
+                paramsHtml += `
+                    <div class="param-group">
+                        <label class="param-label">
+                            ${param.name} 
+                            ${param.required ? '<span style="color: #f93e3e;">*</span>' : ''}
+                            ${param.isHeader ? '<span style="color: #667eea; font-size: 11px; margin-left: 5px;">(header)</span>' : ''}
+                            ${param.isPathParam ? '<span style="color: #fca130; font-size: 11px; margin-left: 5px;">(path)</span>' : ''}
+                        </label>
+                        ${inputHtml}
+                    </div>
+                `;
+            });
+
+            return `
+                <div class="api-section" data-index="${index}">
+                    <div class="api-header" onclick="toggleSection(${index})">
+                        <div style="display: flex; align-items: center; flex: 1;">
+                            <span class="method ${methodClass}">${spec.method}</span>
+                            <span class="api-path">${spec.path}</span>
+                        </div>
+                        <div style="display: flex; align-items: center;">
+                            <span class="api-title" style="margin-right: 15px;">${spec.title}</span>
+                            <span class="toggle-icon" id="toggle-${index}">▼</span>
+                        </div>
+                    </div>
+                    <div class="api-content" id="content-${index}">
+                        <div class="description">${spec.description}</div>
+                        
+                        ${spec.params.length > 0 ? `
+                        <div class="request-section">
+                            <div class="section-title">📥 Request Parameters</div>
+                            ${paramsHtml}
+                        </div>
+                        ` : ''}
+                        
+                        <button class="btn btn-primary" onclick="testApi(${index})" id="btn-${index}">
+                            🚀 Execute Request
+                        </button>
+                        
+                        <div class="response-section" id="response-section-${index}" style="display: none;">
+                            <div class="section-title">
+                                📤 Response 
+                                <span class="status-badge" id="status-${index}"></span>
+                            </div>
+                            <div class="response-box" id="response-${index}"></div>
+                        </div>
+                        
+                        ${spec.exampleResponse ? `
+                        <div class="example-section">
+                            <div class="example-title">📋 Example Response</div>
+                            <div class="example-code">${JSON.stringify(spec.exampleResponse, null, 2)}</div>
+                        </div>
+                        ` : ''}
+                        
+                        <div class="note">
+                            <strong>💡 Tip:</strong> Make sure your API server is running and the API key is correct above.
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function toggleSection(index) {
+            const content = document.getElementById(`content-${index}`);
+            const toggle = document.getElementById(`toggle-${index}`);
+            
+            content.classList.toggle('active');
+            toggle.textContent = content.classList.contains('active') ? '▲' : '▼';
+        }
+
+        async function testApi(index) {
+            const spec = apiSpecs[index];
+            const apiBaseUrl = document.getElementById('apiBaseUrl').value;
+            const apiKey = document.getElementById('apiKey').value;
+            
+            const btn = document.getElementById(`btn-${index}`);
+            const responseSection = document.getElementById(`response-section-${index}`);
+            const statusBadge = document.getElementById(`status-${index}`);
+            const responseBox = document.getElementById(`response-${index}`);
+            
+            btn.disabled = true;
+            btn.textContent = '⏳ Sending...';
+            responseSection.style.display = 'block';
+            statusBadge.className = 'status-badge loading';
+            statusBadge.textContent = 'Loading';
+            responseBox.textContent = 'Sending request...';
+            
+            try {
+                let url = spec.path;
+                let options = {
+                    method: spec.method,
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                };
+                
+                if (apiKey) {
+                    options.headers['Authorization'] = `Bearer ${apiKey}`;
+                }
+                
+                let body = null;
+                let headers = {};
+                
+                spec.params.forEach(param => {
+                    const value = document.getElementById(`param-${index}-${param.name}`).value;
+                    
+                    if (param.isHeader) {
+                        if (value) headers[param.name] = value;
+                    } else if (param.isPathParam) {
+                        url = url.replace(`{${param.name}}`, value);
+                    } else if (spec.method === 'GET' || spec.method === 'DELETE') {
+                        const separator = url.includes('?') ? '&' : '?';
+                        if (value) {
+                            url += `${separator}${param.name}=${encodeURIComponent(value)}`;
+                        }
+                    } else if (value && !param.isPathParam) {
+                        if (!body) body = {};
+                        body[param.name] = value;
+                    }
+                });
+                
+                if (Object.keys(headers).length > 0) {
+                    Object.assign(options.headers, headers);
+                }
+                
+                if (body) {
+                    options.body = JSON.stringify(body);
+                }
+                
+                const fullUrl = `${apiBaseUrl}${url}`;
+                
+                console.log('Request:', { url: fullUrl, options });
+                
+                const response = await fetch(fullUrl, options);
+                const data = await response.json();
+                
+                statusBadge.className = `status-badge ${response.ok ? 'success' : 'error'}`;
+                statusBadge.textContent = `${response.status} ${response.statusText}`;
+                responseBox.textContent = JSON.stringify(data, null, 2);
+                
+                if (!response.ok) {
+                    responseBox.style.color = '#ff6b6b';
+                } else {
+                    responseBox.style.color = '#d4d4d4';
+                }
+                
+            } catch (error) {
+                statusBadge.className = 'status-badge error';
+                statusBadge.textContent = 'Error';
+                responseBox.textContent = `Error: ${error.message}`;
+                responseBox.style.color = '#ff6b6b';
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '🚀 Execute Request';
+            }
+        }
+
+        function init() {
+            const container = document.getElementById('apiContainer');
+            container.innerHTML = apiSpecs.map((spec, index) => renderApiSection(spec, index)).join('');
+        }
+
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>

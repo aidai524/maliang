@@ -1,0 +1,410 @@
+openapi: 3.0.3
+info:
+  title: Image SaaS API
+  description: |
+    Async image generation API using Gemini/Nano Banana models.
+
+    Features:
+    - Async job submission with polling support
+    - Idempotency for safe retries
+    - Webhook notifications
+    - Rate limiting per tenant
+    - Draft and final generation modes
+  version: 0.1.0
+  contact:
+    name: API Support
+  license:
+    name: MIT
+
+servers:
+  - url: https://api.yourdomain.com
+    description: Production server
+  - url: http://localhost:3000
+    description: Local development server
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      description: Check if the API is running
+      operationId: healthCheck
+      tags:
+        - Health
+      responses:
+        '200':
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  timestamp:
+                    type: string
+                    format: date-time
+
+  /:
+    get:
+      summary: API information
+      description: Get API metadata and available endpoints
+      operationId: apiInfo
+      tags:
+        - Info
+      responses:
+        '200':
+          description: API information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  name:
+                    type: string
+                  version:
+                    type: string
+                  endpoints:
+                    type: object
+
+  /v1/images/generate:
+    post:
+      summary: Submit image generation job
+      description: |
+        Submit a new image generation job. The job is processed asynchronously
+        and results can be retrieved via polling or webhook notification.
+      operationId: generateImage
+      tags:
+        - Images
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          description: |
+            Optional idempotency key for safe retries. If a job with the same
+            key already exists for this tenant, the existing job is returned.
+          schema:
+            type: string
+          example: client-request-id-12345
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - prompt
+              properties:
+                prompt:
+                  type: string
+                  description: Text prompt for image generation
+                  minLength: 1
+                  example: A photorealistic product photo of a tea canister on a white background
+                inputImageUrl:
+                  type: string
+                  format: uri
+                  description: Optional reference image for img2img
+                  example: https://example.com/reference.png
+                mode:
+                  type: string
+                  enum: [draft, final]
+                  description: |
+                    draft: Faster, lower quality
+                    final: High quality (default)
+                  default: final
+      responses:
+        '202':
+          description: Job accepted and queued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jobId:
+                    type: string
+                    format: cuid
+                    description: Unique job identifier
+                  status:
+                    type: string
+                    enum: [QUEUED]
+                    description: Initial job status
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v1/jobs:
+    get:
+      summary: List jobs
+      description: |
+        List jobs for the authenticated tenant, with optional filtering.
+        Results are paginated using cursor-based pagination.
+      operationId: listJobs
+      tags:
+        - Jobs
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [QUEUED, RUNNING, SUCCEEDED, FAILED, RETRYING, CANCELED]
+          description: Filter by job status
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+          description: Number of results per page
+        - in: query
+          name: cursor
+          schema:
+            type: string
+          description: Pagination cursor from previous response
+      responses:
+        '200':
+          description: List of jobs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/JobSummary'
+                  nextCursor:
+                    type: string
+                    description: Cursor for next page (null if no more results)
+                    nullable: true
+                  hasMore:
+                    type: boolean
+                    description: Whether more results are available
+
+  /v1/jobs/{jobId}:
+    get:
+      summary: Get job status
+      description: |
+        Get the current status and results of a job.
+        Poll this endpoint to check job progress.
+      operationId: getJob
+      tags:
+        - Jobs
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - in: path
+          name: jobId
+          required: true
+          schema:
+            type: string
+          description: Job identifier
+          example: clx1234567890abcdef
+      responses:
+        '200':
+          description: Job details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Job not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      summary: Cancel job
+      description: |
+        Cancel a queued job. Only jobs in QUEUED or RETRYING status can be canceled.
+      operationId: cancelJob
+      tags:
+        - Jobs
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - in: path
+          name: jobId
+          required: true
+          schema:
+            type: string
+          description: Job identifier
+      responses:
+        '200':
+          description: Job canceled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jobId:
+                    type: string
+                  status:
+                    type: string
+                    enum: [CANCELED]
+        '400':
+          description: Cannot cancel job in current state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Job not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: |
+        Use format: `Bearer YOUR_API_KEY`
+        Alternative header: `X-API-Key: YOUR_API_KEY`
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error code
+          example: RATE_LIMIT_EXCEEDED
+        message:
+          type: string
+          description: Human-readable error message
+          example: Rate limit exceeded. Please retry later.
+
+    Job:
+      type: object
+      properties:
+        jobId:
+          type: string
+          format: cuid
+        status:
+          type: string
+          enum: [QUEUED, RUNNING, SUCCEEDED, FAILED, RETRYING, CANCELED]
+        resultUrls:
+          type: array
+          items:
+            type: string
+          description: Generated image URLs (only present when status=SUCCEEDED)
+          nullable: true
+        error:
+          type: object
+          description: Error details (only present when status=FAILED)
+          nullable: true
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    JobSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: cuid
+        status:
+          type: string
+          enum: [QUEUED, RUNNING, SUCCEEDED, FAILED, RETRYING, CANCELED]
+        prompt:
+          type: string
+        mode:
+          type: string
+          enum: [draft, final]
+        resultUrls:
+          type: array
+          items:
+            type: string
+          nullable: true
+        errorCode:
+          type: string
+          nullable: true
+        errorMessage:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    WebhookPayload:
+      type: object
+      description: Payload sent to tenant webhooks
+      properties:
+        eventId:
+          type: string
+          description: Unique webhook event ID
+        jobId:
+          type: string
+          format: cuid
+        tenantId:
+          type: string
+          format: cuid
+        status:
+          type: string
+          enum: [SUCCEEDED, FAILED]
+        resultUrls:
+          type: array
+          items:
+            type: string
+          description: Generated image URLs (present when status=SUCCEEDED)
+        error:
+          type: object
+          description: Error details (present when status=FAILED)
+          nullable: true
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+        timestamp:
+          type: integer
+          description: Unix timestamp in milliseconds
+
+tags:
+  - name: Health
+    description: Health check endpoints
+  - name: Info
+    description: API information
+  - name: Images
+    description: Image generation endpoints
+  - name: Jobs
+    description: Job management endpoints

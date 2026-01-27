@@ -1,0 +1,252 @@
+import { config } from '../../config/env';
+import { ProviderError } from '../../utils/errors';
+import { createLogger } from '../../utils/logger';
+import { sleep } from '../../utils/sleep';
+import type {
+  GeminiGenerateOptions,
+  GeminiSubmitResult,
+  GeminiStatusResult,
+  GeminiMode,
+  GeminiResolution,
+  GeminiAspectRatios,
+  GenerationConfig,
+  GeminiGenerateContentRequest,
+} from './types';
+
+const logger = createLogger('gemini');
+
+const DEFAULT_API_BASE = 'https://generativelanguage.googleapis.com';
+const DEFAULT_MODEL = 'gemini-3.0-pro-vision';
+
+function buildGeminiRequest(
+  prompt: string,
+  inputImageUrl: string | undefined,
+  mode: GeminiMode,
+  resolution?: GeminiResolution,
+  aspectRatio?: GeminiAspectRatios,
+  sampleCount?: number,
+) {
+  const generationConfig: GenerationConfig = {
+    temperature: mode === 'draft' ? 0.7 : 1,
+  };
+
+  if (resolution) {
+    generationConfig.topK = resolution === '1:1' ? 1 : resolution === '4:3' ? 4 : undefined;
+  }
+
+  if (aspectRatio) {
+    generationConfig.topP = aspectRatio === '1:1' ? 1 : aspectRatio === '9:16' ? 9 : aspectRatio === '16:9' ? 16 : aspectRatio === '4:3' ? 3 : aspectRatio === '3:2' ? 2 : aspectRatio === '2:3' ? 3 : aspectRatio === '1:1' ? 1 : aspectRatio === '5:4' ? 4 : aspectRatio === '4:5' ? 5 : aspectRatio === '21:9' ? 21 : aspectRatio === '1:1' ? 1 : undefined;
+  }
+
+  const parts: any[] = [];
+
+  if (sampleCount && sampleCount > 1) {
+    for (let i = 0; i < sampleCount; i++) {
+      parts.push({ text: prompt });
+    }
+  } else {
+    parts.push({ text: prompt });
+  }
+
+  if (inputImageUrl) {
+    parts.push({
+      inlineData: {
+        mimeType: 'image/png',
+        data: inputImageUrl,
+      },
+    });
+  }
+
+  return {
+    contents: [
+      {
+        role: 'user',
+        parts,
+      },
+    ],
+    generationConfig,
+  };
+}
+
+export async function geminiSubmit(
+  options: GeminiGenerateOptions
+): Promise<GeminiSubmitResult> {
+  const { apiKey, prompt, inputImageUrl, mode, resolution, aspectRatio, sampleCount } = options;
+
+  const apiBase = config.gemini.apiBase || DEFAULT_API_BASE;
+  const model = config.gemini.model || DEFAULT_MODEL;
+
+  const requestBody = buildGeminiRequest(prompt, inputImageUrl, mode, resolution, aspectRatio, sampleCount);
+
+  const url = `${apiBase}/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+  logger.info('Submitting to Gemini API', {
+    model,
+    mode,
+    hasInputImage: !!inputImageUrl,
+    resolution,
+    aspectRatio,
+    sampleCount,
+  });
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      handleGeminiError(response.status, errorText);
+    }
+
+    const data = (await response.json()) as any;
+
+    const requestId = `gemini_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
+    await cacheGeminiResponse(requestId, data);
+
+    logger.info('Gemini submit successful', { requestId });
+
+    return { requestId };
+  } catch (error) {
+    if (error instanceof ProviderError) {
+      throw error;
+    }
+    logger.error('Gemini submit failed', { error });
+    throw new ProviderError(
+      `Gemini submit failed ${error}`,
+      'GEMINI_SUBMIT_ERROR'
+    );
+  }
+}
+
+export async function geminiPoll(
+  requestId: string,
+  apiKey: string
+): Promise<GeminiStatusResult> {
+  const cached = await getCachedGeminiResponse(requestId);
+
+  if (cached) {
+    return parseGeminiResponse(cached);
+  }
+
+  logger.warn('No cached response found', { requestId });
+
+  return {
+    status: 'FAILED',
+    error: 'Response not found - may have expired',
+  };
+}
+
+export async function geminiGenerate(
+  options: GeminiGenerateOptions,
+  pollOptions: {
+    maxAttempts?: number;
+    intervalMs?: number;
+  } = {}
+): Promise<GeminiStatusResult & { status: 'SUCCEEDED' | 'FAILED' }> {
+  const { maxAttempts = 30, intervalMs = 2000 } = pollOptions;
+
+  const { requestId } = await geminiSubmit(options);
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const result = await geminiPoll(requestId, options.apiKey);
+
+    if (result.status === 'SUCCEEDED' || result.status === 'FAILED') {
+      return result as any;
+    }
+
+    await sleep(intervalMs);
+  }
+
+  return {
+    status: 'FAILED',
+    error: 'Poll timeout',
+  };
+}
+
+function handleGeminiError(status: number, errorText: string): never {
+  let code = 'GEMINI_ERROR';
+  let retryable = true;
+
+  if (status === 400) {
+    code = 'INVALID_REQUEST';
+    retryable = false;
+  } else if (status === 401) {
+    code = 'INVALID_API_KEY';
+    retryable = false;
+  } else if (status === 429) {
+    code = 'RATE_LIMIT_EXCEEDED';
+    retryable = true;
+  } else if (status >= 500) {
+    code = 'SERVER_ERROR';
+    retryable = true;
+  }
+
+  throw new ProviderError(
+    `Gemini API error (${status}): ${errorText}`,
+    code,
+    retryable
+  );
+}
+
+function parseGeminiResponse(data: any): GeminiStatusResult {
+  if (data.error) {
+    return {
+      status: 'FAILED',
+      error: data.error.message || 'Unknown error',
+    };
+  }
+
+  const candidates = data.candidates || [];
+
+  if (candidates.length === 0) {
+    return {
+      status: 'FAILED',
+      error: 'No candidates in response',
+    };
+  }
+
+  const parts = candidates[0].content?.parts || [];
+  const images: Array<{ url: string; mimeType: string }> = [];
+
+  for (const part of parts) {
+    if (part.inlineData) {
+      const { mimeType, data: base64Data } = part.inlineData;
+      images.push({
+        url: `data:${mimeType};base64,${base64Data}`,
+        mimeType,
+      });
+    }
+  }
+
+  if (images.length === 0) {
+    return {
+      status: 'FAILED',
+      error: 'No images generated',
+    };
+  }
+
+  return {
+    status: 'SUCCEEDED',
+    images,
+  };
+}
+
+const responseCache = new Map<string, any>();
+
+async function cacheGeminiResponse(requestId: string, data: any): Promise<void> {
+  responseCache.set(requestId, data);
+
+  setTimeout(() => {
+    responseCache.delete(requestId);
+  }, 5 * 60 * 1000);
+}
+
+async function getCachedGeminiResponse(requestId: string): Promise<any | null> {
+  return responseCache.get(requestId) || null;
+}

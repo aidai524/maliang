@@ -5,7 +5,7 @@
  * Run this after starting the server to test basic functionality
  */
 
-import { prisma } from '../src/db/prisma';
+import { prisma } from '../../src/db/prisma';
 
 const API_BASE = process.env.API_BASE || 'http://localhost:3000';
 

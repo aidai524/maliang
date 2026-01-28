@@ -15,7 +15,7 @@
     "create-tenant": "ts-node scripts/create-tenant.ts",
     "add-provider-key": "ts-node scripts/add-provider-key.ts",
     "show-keys": "ts-node scripts/show-keys.ts",
-    "test-api": "ts-node scripts/test-api.ts"
+    "test-api": "ts-node tests/api/test-api.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.600.0",

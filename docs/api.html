@@ -325,7 +325,7 @@
     <div class="container">
         <div class="header">
             <h1>🎨 Image SaaS API</h1>
-            <p>异步图片生成服务 - 支持 Gemini/Nano Banana 模型</p>
+            <p>异步图片生成服务 - 支持多端点负载均衡（官方 Gemini + 云雾代理）</p>
         </div>
 
         <div class="config-bar">
@@ -358,7 +358,7 @@
                 method: 'POST',
                 path: '/v1/images/generate',
                 title: 'Submit Image Generation',
-                description: '提交一个新的图片生成任务。任务将异步处理，结果可以通过轮询或 Webhook 回调获取。<br><br><strong>注意：</strong> <code>resolution</code> 和 <code>aspectRatio</code> 参数是可选的，部分模型（如 gemini-2.0-flash-exp-image-generation）不支持这些参数。',
+                description: '提交一个新的图片生成任务。任务将异步处理，结果可以通过轮询或 Webhook 回调获取。<br><br><strong>多端点负载均衡：</strong> 系统自动在官方 Gemini API 和云雾代理之间分配请求，官方 503 时自动切换到备用端点。<br><br><strong>模型兼容性：</strong><br>• <code>gemini-3-pro-image-preview</code> - 支持 4K，优先使用云雾端点<br>• <code>gemini-2.5-flash-image</code> - 官方和云雾都支持，不支持 resolution<br>• <code>gemini-2.0-flash-exp-image-generation</code> - 仅官方支持<br><br><strong>注意：</strong> <code>resolution</code> 和 <code>aspectRatio</code> 参数是可选的，部分模型不支持这些参数。',
                 params: [
                     {
                         name: 'prompt',

@@ -2,11 +2,39 @@
 
 ## Overview
 
-Image SaaS API 提供异步图片生成服务，基于 Gemini/Nano Banana 模型。
+Image SaaS API 提供异步图片生成服务，支持多端点负载均衡（官方 Gemini API + 第三方代理）。
 
 **Base URL:** `http://localhost:3001` (开发环境)
 
 **认证方式:** Bearer Token
+
+---
+
+## Multi-Endpoint Load Balancing
+
+系统支持跨端点负载均衡，自动在多个 API 端点之间分配请求：
+
+### 支持的端点
+
+| 端点 | 说明 | 优先级 |
+|------|------|--------|
+| `official` | Google Gemini 官方 API | 1 (最高) |
+| `yunwu` | 云雾第三方代理 API | 2 |
+
+### 支持的模型
+
+| 模型 | 官方支持 | 云雾支持 | resolution 参数 |
+|------|---------|---------|----------------|
+| `gemini-2.0-flash-exp-image-generation` | ✅ | ❌ | ❌ |
+| `gemini-2.5-flash-image` | ✅ | ✅ | ❌ |
+| `gemini-3-pro-image-preview` | ✅ | ✅ (优先) | ✅ 4K |
+
+### 负载均衡策略
+
+- **优先级排序**: 优先使用高优先级端点
+- **智能 Fallback**: 官方 API 返回 503 时自动切换到备用端点
+- **健康监控**: 连续失败的端点会被临时排除
+- **模型偏好**: `gemini-3-pro-image-preview` 优先使用云雾端点（更稳定）
 
 ---
 

@@ -70,7 +70,7 @@ export const generateWorker = new Worker<GenerateJobData>(
         tenantId: dbJob.tenantId,
         jobId: dbJob.id,
       });
-      throw new ProviderKeyError('NO_PROVIDER_KEY_AVAILABLE');
+      throw new Error('NO_PROVIDER_KEY_AVAILABLE');
     }
 
       keyConcKey = `lim:key:${providerKey.id}:inflight`;

@@ -22,12 +22,14 @@ function buildGeminiRequest(
   prompt: string,
   inputImageUrl: string | undefined,
   mode: GeminiMode,
-  resolution?: GeminiResolution,
+  resolution?: '1:1' | '4:3',
   aspectRatio?: GeminiAspectRatios,
   sampleCount?: number,
 ) {
   const generationConfig: GenerationConfig = {
     temperature: mode === 'draft' ? 0.7 : 1,
+    // Enable image generation output
+    responseModalities: ['TEXT', 'IMAGE'],
   };
 
   if (resolution) {
@@ -35,17 +37,31 @@ function buildGeminiRequest(
   }
 
   if (aspectRatio) {
-    generationConfig.topP = aspectRatio === '1:1' ? 1 : aspectRatio === '9:16' ? 9 : aspectRatio === '16:9' ? 16 : aspectRatio === '4:3' ? 3 : aspectRatio === '3:2' ? 2 : aspectRatio === '2:3' ? 3 : aspectRatio === '1:1' ? 1 : aspectRatio === '5:4' ? 4 : aspectRatio === '4:5' ? 5 : aspectRatio === '21:9' ? 21 : aspectRatio === '1:1' ? 1 : undefined;
+    const aspectRatioMap: Record<GeminiAspectRatios, number> = {
+      '1:1': 1,
+      '9:16': 9,
+      '16:9': 16,
+      '4:3': 4,
+      '3:2': 3,
+      '2:3': 2,
+      '5:4': 5,
+      '4:5': 4,
+      '21:9': 21,
+    };
+    generationConfig.topP = aspectRatioMap[aspectRatio];
   }
 
   const parts: any[] = [];
 
+  // Prepend "Generate an image of" to help the model understand the intent
+  const imagePrompt = `Generate an image: ${prompt}`;
+
   if (sampleCount && sampleCount > 1) {
     for (let i = 0; i < sampleCount; i++) {
-      parts.push({ text: prompt });
+      parts.push({ text: imagePrompt });
     }
   } else {
-    parts.push({ text: prompt });
+    parts.push({ text: imagePrompt });
   }
 
   if (inputImageUrl) {
@@ -76,13 +92,20 @@ export async function geminiSubmit(
   const apiBase = config.gemini.apiBase || DEFAULT_API_BASE;
   const model = config.gemini.model || DEFAULT_MODEL;
 
-  const requestBody = buildGeminiRequest(prompt, inputImageUrl, mode, resolution, aspectRatio, sampleCount);
+  const requestBody = buildGeminiRequest(
+    prompt,
+    inputImageUrl,
+    mode || 'final',
+    resolution && resolution === '1K' ? '1:1' : resolution === '2K' ? '4:3' : undefined,
+    aspectRatio,
+    sampleCount
+  );
 
   const url = `${apiBase}/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
   logger.info('Submitting to Gemini API', {
     model,
-    mode,
+    mode: mode || 'final',
     hasInputImage: !!inputImageUrl,
     resolution,
     aspectRatio,

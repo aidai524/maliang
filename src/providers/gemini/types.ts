@@ -32,8 +32,10 @@ export type GenerationConfig = {
   topP?: number;
   maxOutputTokens?: number;
   imageSize?: '1K' | '2K';
-  aspectRatio?: string;
+  aspectRatio?: string | number;
   numberOfImages?: number;
+  // Enable image output from Gemini
+  responseModalities?: ('TEXT' | 'IMAGE')[];
 };
 
 export type GeminiPart =

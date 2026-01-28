@@ -54,7 +54,7 @@ curl http://localhost:3001/health
 ```json
 {
   "status": "ok",
-  "timestamp": "2026-01-26T10:00:00.000Z"
+  "timestamp": "2026-01-28T10:00:00.000Z"
 }
 ```
 
@@ -79,16 +79,32 @@ curl http://localhost:3001/health
 | `prompt` | string | 是 | 图片生成的文本描述 |
 | `mode` | string | 否 | 生成模式：`draft`(快速/低质量) 或 `final`(高质量)，默认 `final` |
 | `inputImageUrl` | string | 否 | 参考图片 URL (用于 img2img) |
+| `resolution` | string | 否 | 图片分辨率：`1K`, `2K`, `4K`。可选参数，部分模型可能不支持 |
+| `aspectRatio` | string | 否 | 宽高比：`Auto`, `1:1`, `9:16`, `16:9`, `3:4`, `4:3`, `3:2`, `2:3`, `5:4`, `4:5`, `21:9`。可选参数，部分模型可能不支持 |
+| `sampleCount` | number | 否 | 生成图片数量 (1-10)。可选参数 |
 
 **请求示例:**
 
 ```bash
+# 最简单的请求 (只需 prompt)
 curl -X POST http://localhost:3001/v1/images/generate \
   -H "Authorization: Bearer img_test_dev_123456789" \
   -H "Content-Type: application/json" \
   -d '{
     "prompt": "A photorealistic cat sitting on a couch",
     "mode": "draft"
+  }'
+
+# 带完整参数的请求 (部分模型支持)
+curl -X POST http://localhost:3001/v1/images/generate \
+  -H "Authorization: Bearer img_test_dev_123456789" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "A beautiful sunset over mountains",
+    "mode": "final",
+    "resolution": "2K",
+    "aspectRatio": "16:9",
+    "sampleCount": 2
   }'
 ```
 
@@ -106,6 +122,8 @@ curl -X POST http://localhost:3001/v1/images/generate \
 - `400 Bad Request` - 请求参数无效
 - `401 Unauthorized` - API Key 无效
 - `429 Too Many Requests` - 超出速率限制
+
+**注意:** `resolution` 和 `aspectRatio` 参数是可选的，某些模型（如 `gemini-2.0-flash-exp-image-generation`）可能不支持这些参数。如果不传入，将使用模型默认设置。
 
 ---
 
@@ -148,12 +166,12 @@ curl "http://localhost:3001/v1/jobs?status=SUCCEEDED&limit=10" \
       "prompt": "A cute cat sitting on a couch",
       "mode": "draft",
       "resultUrls": [
-        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA..."
+        "https://assets.sendto.you/cmkuz35wf.../image.png"
       ],
       "errorCode": null,
       "errorMessage": null,
-      "createdAt": "2026-01-26T09:36:16.288Z",
-      "updatedAt": "2026-01-26T09:36:25.123Z"
+      "createdAt": "2026-01-28T09:36:16.288Z",
+      "updatedAt": "2026-01-28T09:36:25.123Z"
     }
   ],
   "hasMore": false
@@ -193,11 +211,11 @@ curl http://localhost:3001/v1/jobs/cmkuz35wf00034rk15ycgzvce \
   "jobId": "cmkuz35wf00034rk15ycgzvce",
   "status": "SUCCEEDED",
   "resultUrls": [
-    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA..."
+    "https://assets.sendto.you/cmkuz35wf.../image.png"
   ],
   "error": null,
-  "createdAt": "2026-01-26T09:36:16.288Z",
-  "updatedAt": "2026-01-26T09:36:25.123Z"
+  "createdAt": "2026-01-28T09:36:16.288Z",
+  "updatedAt": "2026-01-28T09:36:25.123Z"
 }
 ```
 
@@ -254,6 +272,45 @@ curl -X DELETE http://localhost:3001/v1/jobs/cmkuz35wf00034rk15ycgzvce \
 
 ---
 
+## Generation Parameters
+
+### Mode (生成模式)
+
+| 值 | 说明 |
+|------|------|
+| `draft` | 快速生成，较低质量，适合预览 |
+| `final` | 高质量生成，较慢，适合最终输出 |
+
+### Resolution (分辨率) - 可选
+
+| 值 | 说明 |
+|------|------|
+| `1K` | 1024 像素 |
+| `2K` | 2048 像素 |
+| `4K` | 4096 像素 |
+
+> **注意:** 不是所有模型都支持此参数。如果模型不支持，请不要传入此参数。
+
+### Aspect Ratio (宽高比) - 可选
+
+| 值 | 说明 |
+|------|------|
+| `Auto` | 自动选择 |
+| `1:1` | 正方形 |
+| `9:16` | 竖屏 (手机) |
+| `16:9` | 横屏 (宽屏) |
+| `3:4` | 竖屏 |
+| `4:3` | 标准 |
+| `3:2` | 照片比例 |
+| `2:3` | 竖版照片 |
+| `5:4` | 接近正方形 |
+| `4:5` | 竖版接近正方形 |
+| `21:9` | 超宽屏 |
+
+> **注意:** 不是所有模型都支持此参数。如果模型不支持，请不要传入此参数。
+
+---
+
 ## Common Error Responses
 
 所有错误响应都遵循以下格式：
@@ -274,6 +331,8 @@ curl -X DELETE http://localhost:3001/v1/jobs/cmkuz35wf00034rk15ycgzvce \
 | `RATE_LIMIT_EXCEEDED` | 超出速率限制 | 429 |
 | `JOB_NOT_FOUND` | 任务不存在 | 404 |
 | `INVALID_STATE` | 任务状态不允许该操作 | 400 |
+| `PROVIDER_ERROR` | AI 模型服务错误 | 500 |
+| `SERVICE_OVERLOAD` | 服务过载，请稍后重试 | 503 |
 | `UNKNOWN_ERROR` | 未知错误 | 500 |
 
 ---
@@ -320,10 +379,30 @@ curl -X POST http://localhost:3001/v1/images/generate \
   "tenantId": "cmktx999f0000ssga7o497182",
   "status": "SUCCEEDED",
   "resultUrls": [
-    "https://cdn.example.com/image1.png"
+    "https://assets.sendto.you/image1.png"
   ],
   "error": null,
   "timestamp": 1737893785000
+}
+```
+
+**签名验证:**
+
+Webhook 请求会携带 `X-Signature` header，格式为 `sha256=<hex>`。
+
+验证方式：
+```javascript
+const crypto = require('crypto');
+
+function verifyWebhook(rawBody, signatureHeader, secret) {
+  const [, sigHex] = signatureHeader.split('=', 2);
+  const mac = crypto.createHmac('sha256', secret)
+    .update(rawBody, 'utf8')
+    .digest('hex');
+  return crypto.timingSafeEqual(
+    Buffer.from(sigHex, 'hex'),
+    Buffer.from(mac, 'hex')
+  );
 }
 ```
 

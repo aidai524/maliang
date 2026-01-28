@@ -27,13 +27,17 @@ model Tenant {
 model ProviderKey {
   id               String   @id @default(cuid())
   provider         String   // "gemini" / "nanobanana"
+  endpoint         String   @default("official")  // "official" / "yunwu" / etc.
   encryptedKey     String
   rpmLimit         Int      @default(60)
   concurrencyLimit Int      @default(2)
+  priority         Int      @default(1)  // Lower number = higher priority
   enabled          Boolean  @default(true)
 
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
+
+  @@index([provider, endpoint, enabled])
 }
 
   model Job {
@@ -58,9 +62,9 @@ model ProviderKey {
   providerKeyId     String?
   providerRequestId String?  // Gemini async operation name/id
 
-  resolution       String?   @default("1:1") // 1:1(1K) 或 4:3(4K)
-  aspectRatio       String?   @default("1:1")  // 1:1, 9:16, 16:9, 4:3, 3:2, 2:3, 5:4, 4:5, 21:9
-  sampleCount       Int?   @default(1)  // 生成张数，默认1张
+  resolution        String?   // 1K, 2K, 4K - optional, not all models support it
+  aspectRatio       String?   // Auto, 1:1, 9:16, 16:9, 3:4, 4:3, 3:2, 2:3, 5:4, 4:5, 21:9 - optional
+  sampleCount       Int?      // Number of images to generate - optional
 
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt

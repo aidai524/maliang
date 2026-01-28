@@ -2,6 +2,7 @@ import { config } from '../../config/env';
 import { ProviderError } from '../../utils/errors';
 import { createLogger } from '../../utils/logger';
 import { sleep } from '../../utils/sleep';
+import { buildApiUrl, getEndpointConfig, GEMINI_ENDPOINTS } from './endpoints';
 import type {
   GeminiGenerateOptions,
   GeminiSubmitResult,
@@ -15,14 +16,14 @@ import type {
 
 const logger = createLogger('gemini');
 
-const DEFAULT_API_BASE = 'https://generativelanguage.googleapis.com';
+const DEFAULT_ENDPOINT = 'official';
 const DEFAULT_MODEL = 'gemini-3.0-pro-vision';
 
 function buildGeminiRequest(
   prompt: string,
   inputImageUrl: string | undefined,
   mode: GeminiMode,
-  resolution?: '1:1' | '4:3',
+  resolution?: GeminiResolution,
   aspectRatio?: GeminiAspectRatios,
   sampleCount?: number,
 ) {
@@ -32,17 +33,21 @@ function buildGeminiRequest(
     responseModalities: ['TEXT', 'IMAGE'],
   };
 
-  if (resolution) {
-    generationConfig.imageConfig = {
-      imageSize: resolution,
-    };
-  }
-
-  if (aspectRatio) {
-    if (!generationConfig.imageConfig) {
-      generationConfig.imageConfig = {};
+  // Set image configuration if resolution or aspectRatio is provided
+  if (resolution || aspectRatio || sampleCount) {
+    generationConfig.imageConfig = {};
+    
+    if (resolution) {
+      generationConfig.imageConfig.imageSize = resolution;
     }
-    generationConfig.imageConfig.aspectRatio = aspectRatio;
+    
+    if (aspectRatio) {
+      generationConfig.imageConfig.aspectRatio = aspectRatio;
+    }
+    
+    if (sampleCount && sampleCount > 1) {
+      generationConfig.imageConfig.numberOfImages = sampleCount;
+    }
   }
 
   const parts: any[] = [];
@@ -81,23 +86,35 @@ function buildGeminiRequest(
 export async function geminiSubmit(
   options: GeminiGenerateOptions
 ): Promise<GeminiSubmitResult> {
-  const { apiKey, prompt, inputImageUrl, mode = 'final', resolution, aspectRatio, sampleCount, model: optionModel } = options;
+  const { 
+    apiKey, 
+    prompt, 
+    inputImageUrl, 
+    mode = 'final', 
+    resolution, 
+    aspectRatio, 
+    sampleCount, 
+    model: optionModel,
+    endpoint: optionEndpoint,
+  } = options;
 
-  const apiBase = config.gemini.apiBase || DEFAULT_API_BASE;
+  const endpoint = optionEndpoint || DEFAULT_ENDPOINT;
   const model = optionModel || config.gemini.model || DEFAULT_MODEL;
 
   const requestBody = buildGeminiRequest(
     prompt,
     inputImageUrl,
     mode || 'final',
-    resolution && resolution === '1K' ? '1:1' : resolution === '2K' ? '4:3' : undefined,
+    resolution,
     aspectRatio,
     sampleCount
   );
 
-  const url = `${apiBase}/v1beta/models/${model}:generateContent?key=${apiKey}`;
+  // Build URL and headers based on endpoint configuration
+  const { url, headers } = buildApiUrl(endpoint, model, apiKey);
 
   logger.info('Submitting to Gemini API', {
+    endpoint,
     model,
     mode: mode || 'final',
     hasInputImage: !!inputImageUrl,
@@ -109,15 +126,13 @@ export async function geminiSubmit(
   try {
     const response = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      handleGeminiError(response.status, errorText);
+      handleGeminiError(response.status, errorText, endpoint);
     }
 
     const data = (await response.json()) as any;
@@ -126,14 +141,14 @@ export async function geminiSubmit(
 
     await cacheGeminiResponse(requestId, data);
 
-    logger.info('Gemini submit successful', { requestId });
+    logger.info('Gemini submit successful', { requestId, endpoint });
 
-    return { requestId, model };
+    return { requestId, model, endpoint };
   } catch (error) {
     if (error instanceof ProviderError) {
       throw error;
     }
-    logger.error('Gemini submit failed', { error });
+    logger.error('Gemini submit failed', { error, endpoint });
     throw new ProviderError(
       `Gemini submit failed ${error}`,
       'GEMINI_SUBMIT_ERROR'
@@ -165,22 +180,28 @@ export async function geminiGenerate(
     maxAttempts?: number;
     intervalMs?: number;
     enableFallback?: boolean;
+    fallbackEndpoints?: string[];
   } = {}
-): Promise<GeminiStatusResult & { status: 'SUCCEEDED' | 'FAILED'; model?: string }> {
-  const { maxAttempts = 60, intervalMs = 3000, enableFallback = true } = pollOptions;
+): Promise<GeminiStatusResult & { status: 'SUCCEEDED' | 'FAILED'; model?: string; endpoint?: string }> {
+  const { 
+    maxAttempts = 60, 
+    intervalMs = 3000, 
+    enableFallback = true,
+    fallbackEndpoints = ['yunwu'],  // Default fallback to yunwu
+  } = pollOptions;
 
-  const { requestId, model } = await geminiSubmit(options);
+  const { requestId, model, endpoint } = await geminiSubmit(options);
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
       const result = await geminiPoll(requestId, options.apiKey);
 
       if (result.status === 'SUCCEEDED') {
-        return { status: result.status, images: result.images, model };
+        return { status: result.status, images: result.images, model, endpoint };
       }
 
       if (result.status === 'FAILED') {
-        return { status: result.status, error: result.error, model };
+        return { status: result.status, error: result.error, model, endpoint };
       }
 
       await sleep(intervalMs);
@@ -190,29 +211,62 @@ export async function geminiGenerate(
       if (isProviderError) {
         const providerError = error as ProviderError;
 
+        // Handle 503 with endpoint fallback
         if (providerError.code === 'SERVICE_OVERLOAD' && enableFallback) {
-          logger.info('503 error detected, enabling fallback strategy', { attempt });
+          logger.info('503 error detected, attempting endpoint fallback', { 
+            attempt, 
+            currentEndpoint: endpoint,
+            fallbackEndpoints,
+          });
 
-          try {
-            const fallbackModel = 'gemini-2.5-flash-image-preview';
-            const fallbackOptions = { ...options, model: fallbackModel };
+          // Try fallback endpoints
+          for (const fallbackEndpoint of fallbackEndpoints) {
+            // Skip if same as current endpoint
+            if (fallbackEndpoint === endpoint) continue;
 
-            logger.info('Retrying with fallback model', { fallbackModel });
-            const { requestId: fallbackRequestId } = await geminiSubmit(fallbackOptions as any);
+            try {
+              logger.info('Trying fallback endpoint', { fallbackEndpoint, model });
+              
+              const fallbackOptions = { 
+                ...options, 
+                endpoint: fallbackEndpoint,
+              };
 
-            const fallbackResult = await geminiPoll(fallbackRequestId, options.apiKey);
+              const { requestId: fallbackRequestId, endpoint: usedEndpoint } = 
+                await geminiSubmit(fallbackOptions);
 
-            if (fallbackResult.status === 'SUCCEEDED') {
-              return { status: fallbackResult.status, images: fallbackResult.images, model: fallbackModel };
+              const fallbackResult = await geminiPoll(fallbackRequestId, options.apiKey);
+
+              if (fallbackResult.status === 'SUCCEEDED') {
+                logger.info('Fallback endpoint succeeded', { fallbackEndpoint });
+                return { 
+                  status: fallbackResult.status, 
+                  images: fallbackResult.images, 
+                  model, 
+                  endpoint: usedEndpoint,
+                };
+              }
+
+              if (fallbackResult.status === 'FAILED') {
+                logger.warn('Fallback endpoint failed', { 
+                  fallbackEndpoint, 
+                  error: fallbackResult.error,
+                });
+                // Continue to try next fallback endpoint
+                continue;
+              }
+            } catch (fallbackError: any) {
+              logger.error('Fallback endpoint error', { 
+                fallbackEndpoint,
+                error: fallbackError.message,
+              });
+              // Continue to try next fallback endpoint
+              continue;
             }
-
-            if (fallbackResult.status === 'FAILED') {
-              return { status: fallbackResult.status, error: fallbackResult.error, model: fallbackModel };
-            }
-          } catch (fallbackError: any) {
-            logger.error('Fallback model also failed', { error: fallbackError.message });
-            throw fallbackError;
           }
+
+          // All fallback endpoints failed
+          logger.error('All fallback endpoints failed');
         }
       }
 
@@ -224,10 +278,11 @@ export async function geminiGenerate(
     status: 'FAILED',
     error: 'Max attempts reached',
     model,
+    endpoint,
   };
 }
 
-function handleGeminiError(status: number, errorText: string): never {
+function handleGeminiError(status: number, errorText: string, endpoint?: string): never {
   let code = 'GEMINI_ERROR';
   let retryable = true;
 
@@ -243,14 +298,14 @@ function handleGeminiError(status: number, errorText: string): never {
   } else if (status === 503) {
     code = 'SERVICE_OVERLOAD';
     retryable = true;
-    logger.warn('Gemini API 503 - Service overloaded', { status, errorText });
+    logger.warn('Gemini API 503 - Service overloaded', { status, endpoint, errorText });
   } else if (status >= 500) {
     code = 'SERVER_ERROR';
     retryable = true;
   }
 
   throw new ProviderError(
-    `Gemini API error (${status}): ${errorText}`,
+    `Gemini API error (${status}) [${endpoint || 'unknown'}]: ${errorText}`,
     code,
     retryable
   );

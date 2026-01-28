@@ -2,11 +2,19 @@ import { Worker, Job } from 'bullmq';
 import { connection } from '../redis';
 import { QUEUE_GENERATE } from '../queues';
 import { prisma } from '../../db/prisma';
-import { pickProviderKey, markKeySuccess, markKeyFailure, ProviderKeyError } from '../../services/keypool.service';
+import { 
+  pickProviderKey, 
+  markKeySuccess, 
+  markKeyFailure, 
+  markEndpointSuccess,
+  markEndpointFailure,
+  shouldAvoidEndpoint,
+  ProviderKeyError 
+} from '../../services/keypool.service';
 import { acquireRpm, acquireConcurrency, releaseConcurrency } from '../../services/limiter.service';
 import { putImage } from '../../services/storage.service';
 import { markJobRunning, markJobSucceeded, markJobFailed, updateProviderRequestId, appendJobResultUrl } from '../../services/job.service';
-import { geminiGenerate } from '../../providers/gemini';
+import { geminiGenerate, getEndpointsByPriority } from '../../providers/gemini';
 import { config } from '../../config/env';
 import { webhookQueue } from '../bull';
 import { isRetryableError, getErrorMessage } from '../../utils/errors';
@@ -61,8 +69,24 @@ export const generateWorker = new Worker<GenerateJobData>(
     let keyConcLimit = 0;
 
     try {
+    // ========== DETERMINE ENDPOINTS TO AVOID ==========
+    const excludeEndpoints: string[] = [];
+    
+    // Check which endpoints should be avoided due to high 503 rate
+    const endpoints = getEndpointsByPriority();
+    for (const { endpoint } of endpoints) {
+      if (await shouldAvoidEndpoint('gemini', endpoint)) {
+        excludeEndpoints.push(endpoint);
+        logger.info('Excluding endpoint due to high 503 rate', { endpoint });
+      }
+    }
+
     // ========== PICK PROVIDER KEY ==========
-    const providerKey = await pickProviderKey('gemini');
+    const providerKey = await pickProviderKey('gemini', {
+      model: config.gemini.model,
+      excludeEndpoints,
+      allowFallback: true,
+    });
 
     if (!providerKey) {
       logger.error('No provider key available', {
@@ -70,6 +94,7 @@ export const generateWorker = new Worker<GenerateJobData>(
         error: 'NO_PROVIDER_KEY_AVAILABLE',
         tenantId: dbJob.tenantId,
         jobId: dbJob.id,
+        excludeEndpoints,
       });
       throw new Error('NO_PROVIDER_KEY_AVAILABLE');
     }
@@ -79,6 +104,8 @@ export const generateWorker = new Worker<GenerateJobData>(
 
       logger.info('Provider key selected', {
         keyId: providerKey.id,
+        endpoint: providerKey.endpoint,
+        priority: providerKey.priority,
         rpm: providerKey.rpm,
         conc: providerKey.conc,
       });
@@ -171,18 +198,25 @@ export const generateWorker = new Worker<GenerateJobData>(
         promptLength: dbJob.prompt.length,
       });
 
+      // Build fallback endpoints (all endpoints except current one)
+      const fallbackEndpoints = endpoints
+        .map(e => e.endpoint)
+        .filter(e => e !== providerKey.endpoint && !excludeEndpoints.includes(e));
+
       const result = await geminiGenerate({
         apiKey: providerKey.secret,
         prompt: dbJob.prompt,
         inputImageUrl: dbJob.inputImageUrl ?? undefined,
         mode: dbJob.mode as 'draft' | 'final',
-        resolution: dbJob.resolution as '1K' | '2K' | undefined,
-        aspectRatio: dbJob.aspectRatio as '1:1' | '9:16' | '16:9' | '4:3' | '3:2' | '2:3' | '5:4' | '4:5' | '21:9' | undefined,
+        resolution: dbJob.resolution as '1K' | '2K' | '4K' | undefined,
+        aspectRatio: dbJob.aspectRatio as 'Auto' | '1:1' | '9:16' | '16:9' | '3:4' | '4:3' | '3:2' | '2:3' | '5:4' | '4:5' | '21:9' | undefined,
         sampleCount: dbJob.sampleCount ?? undefined,
+        endpoint: providerKey.endpoint,
       }, {
         maxAttempts: 60,
         intervalMs: 3000,
         enableFallback: true,
+        fallbackEndpoints,
       });
 
       // ========== PROCESS RESULT ==========
@@ -235,8 +269,9 @@ export const generateWorker = new Worker<GenerateJobData>(
       // ========== MARK JOB AS SUCCEEDED ==========
       await markJobSucceeded(dbJob.id, resultUrls);
 
-      // Mark key as successful
+      // Mark key and endpoint as successful
       await markKeySuccess(providerKey.id);
+      await markEndpointSuccess('gemini', result.endpoint || providerKey.endpoint);
 
       // ========== QUEUE WEBHOOK ==========
       if (tenant.webhookEnabled && tenant.webhookUrl && tenant.webhookSecret) {
@@ -288,9 +323,19 @@ export const generateWorker = new Worker<GenerateJobData>(
         retryable && nextAttempts < dbJob.maxAttempts
       );
 
-      // Mark key failure if we had one
+      // Mark key and endpoint failure if we had one
       if (keyConcKey) {
-        await markKeyFailure(keyConcKey.replace('lim:key:', '').replace(':inflight', ''), nextAttempts);
+        const keyId = keyConcKey.replace('lim:key:', '').replace(':inflight', '');
+        await markKeyFailure(keyId, nextAttempts);
+        
+        // Find the endpoint for this key and mark endpoint failure
+        const failedKey = await prisma.providerKey.findUnique({
+          where: { id: keyId },
+          select: { endpoint: true },
+        });
+        if (failedKey) {
+          await markEndpointFailure('gemini', failedKey.endpoint, errorCode);
+        }
       }
 
       // Queue webhook for failure if configured

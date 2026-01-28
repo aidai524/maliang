@@ -10,7 +10,8 @@ info:
     - Webhook notifications
     - Rate limiting per tenant
     - Draft and final generation modes
-  version: 0.1.0
+    - Optional resolution and aspect ratio settings
+  version: 0.2.0
   contact:
     name: API Support
   license:
@@ -45,34 +46,16 @@ paths:
                     type: string
                     format: date-time
 
-  /:
-    get:
-      summary: API information
-      description: Get API metadata and available endpoints
-      operationId: apiInfo
-      tags:
-        - Info
-      responses:
-        '200':
-          description: API information
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  name:
-                    type: string
-                  version:
-                    type: string
-                  endpoints:
-                    type: object
-
   /v1/images/generate:
     post:
       summary: Submit image generation job
       description: |
         Submit a new image generation job. The job is processed asynchronously
         and results can be retrieved via polling or webhook notification.
+        
+        **Note:** `resolution` and `aspectRatio` parameters are optional.
+        Some models (like `gemini-2.0-flash-exp-image-generation`) may not support these parameters.
+        If not provided, the model's default settings will be used.
       operationId: generateImage
       tags:
         - Images
@@ -93,7 +76,7 @@ paths:
           application/json:
             schema:
               type: object
-                  required:
+              required:
                 - prompt
               properties:
                 prompt:
@@ -115,20 +98,33 @@ paths:
                   default: final
                 resolution:
                   type: string
-                  enum: [1K, 2K]
-                  description: Image resolution (1K=1024x1024, 2K=2048x2048)
-                  default: 1K
+                  enum: ['1K', '2K', '4K']
+                  description: |
+                    Image resolution. Optional - not all models support this parameter.
+                    - 1K: 1024 pixels
+                    - 2K: 2048 pixels  
+                    - 4K: 4096 pixels
                 aspectRatio:
                   type: string
-                  enum: ['1:1', '9:16', '16:9', '4:3', '3:2', '2:3', '5:4', '4:5', '21:9']
-                  description: Image aspect ratio
-                  default: '1:1'
+                  enum: ['Auto', '1:1', '9:16', '16:9', '3:4', '4:3', '3:2', '2:3', '5:4', '4:5', '21:9']
+                  description: |
+                    Image aspect ratio. Optional - not all models support this parameter.
+                    - Auto: Automatic selection
+                    - 1:1: Square
+                    - 9:16: Portrait (mobile)
+                    - 16:9: Landscape (widescreen)
+                    - 3:4: Portrait
+                    - 4:3: Standard
+                    - 3:2: Photo ratio
+                    - 2:3: Portrait photo
+                    - 5:4: Near square
+                    - 4:5: Portrait near square
+                    - 21:9: Ultra-wide
                 sampleCount:
                   type: integer
                   minimum: 1
                   maximum: 10
-                  description: Number of images to generate
-                  default: 1
+                  description: Number of images to generate (optional)
       responses:
         '202':
           description: Job accepted and queued
@@ -233,7 +229,7 @@ paths:
           schema:
             type: string
           description: Job identifier
-          example: clx1234567890abcdef
+          example: cmkxvg19k0001n893m6b644l1
       responses:
         '200':
           description: Job details
@@ -418,8 +414,6 @@ components:
 tags:
   - name: Health
     description: Health check endpoints
-  - name: Info
-    description: API information
   - name: Images
     description: Image generation endpoints
   - name: Jobs

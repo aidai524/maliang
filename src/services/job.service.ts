@@ -10,8 +10,8 @@ export type CreateJobOptions = {
   prompt: string;
   inputImageUrl?: string;
   mode?: 'draft' | 'final';
-  resolution?: '1K' | '2K';
-  aspectRatio?: '1:1' | '9:16' | '16:9' | '4:3' | '3:2' | '2:3' | '5:4' | '4:5' | '21:9';
+  resolution?: '1K' | '2K' | '4K';
+  aspectRatio?: 'Auto' | '1:1' | '9:16' | '16:9' | '3:4' | '4:3' | '3:2' | '2:3' | '5:4' | '4:5' | '21:9';
   sampleCount?: number;
   maxAttempts?: number;
 };
@@ -35,9 +35,9 @@ export async function createJob(options: CreateJobOptions) {
     prompt,
     inputImageUrl,
     mode = 'final',
-    resolution = '1K',
-    aspectRatio = '1:1',
-    sampleCount = 1,
+    resolution,       // Optional - not all models support it
+    aspectRatio,      // Optional - not all models support it
+    sampleCount,      // Optional
     maxAttempts = 4,
   } = options;
 

@@ -4,9 +4,11 @@
 
 export type GeminiMode = 'draft' | 'final';
 
-export type GeminiResolution = '1K' | '2K';
+export type GeminiResolution = '1K' | '2K' | '4K';
 
-export type GeminiAspectRatios = '1:1' | '9:16' | '16:9' | '4:3' | '3:2' | '2:3' | '5:4' | '4:5' | '21:9';
+export type GeminiAspectRatios = 'Auto' | '1:1' | '9:16' | '16:9' | '3:4' | '4:3' | '3:2' | '2:3' | '5:4' | '4:5' | '21:9';
+
+export type GeminiEndpoint = 'official' | 'yunwu' | string;
 
 export type GeminiGenerateOptions = {
   apiKey: string;
@@ -17,11 +19,13 @@ export type GeminiGenerateOptions = {
   aspectRatio?: GeminiAspectRatios;
   sampleCount?: number;
   model?: string;
+  endpoint?: GeminiEndpoint;
 };
 
 export type GeminiSubmitResult = {
   requestId: string;
   model: string;
+  endpoint: string;
 };
 
 export type GeminiStatusResult =
@@ -33,6 +37,9 @@ export type GenerationConfig = {
   topK?: number;
   topP?: number;
   maxOutputTokens?: number;
+  // Enable image output from Gemini
+  responseModalities?: ('TEXT' | 'IMAGE')[];
+  // Image generation configuration
   imageConfig?: {
     imageSize?: '1K' | '2K' | '4K';
     aspectRatio?: string;

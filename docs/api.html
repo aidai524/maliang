@@ -292,6 +292,19 @@
             color: #856404;
         }
 
+        .info-note {
+            background: #d1ecf1;
+            border-left: 4px solid #17a2b8;
+            padding: 12px;
+            margin-top: 15px;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+
+        .info-note strong {
+            color: #0c5460;
+        }
+
         @media (max-width: 768px) {
             .header h1 {
                 font-size: 1.8em;
@@ -338,14 +351,14 @@
                 params: [],
                 exampleResponse: {
                     status: "ok",
-                    timestamp: "2026-01-26T10:00:00.000Z"
+                    timestamp: "2026-01-28T10:00:00.000Z"
                 }
             },
             {
                 method: 'POST',
                 path: '/v1/images/generate',
                 title: 'Submit Image Generation',
-                description: '提交一个新的图片生成任务。任务将异步处理，结果可以通过轮询或 Webhook 回调获取。',
+                description: '提交一个新的图片生成任务。任务将异步处理，结果可以通过轮询或 Webhook 回调获取。<br><br><strong>注意：</strong> <code>resolution</code> 和 <code>aspectRatio</code> 参数是可选的，部分模型（如 gemini-2.0-flash-exp-image-generation）不支持这些参数。',
                 params: [
                     {
                         name: 'prompt',
@@ -372,24 +385,25 @@
                     {
                         name: 'resolution',
                         type: 'select',
-                        label: 'Resolution',
-                        options: ['1K', '2K'],
-                        default: '1K',
+                        label: 'Resolution (optional - not all models support)',
+                        options: ['', '1K', '2K', '4K'],
+                        default: '',
                         required: false
                     },
                     {
                         name: 'aspectRatio',
                         type: 'select',
-                        label: 'Aspect Ratio',
-                        options: ['1:1', '9:16', '16:9', '4:3', '3:2', '2:3', '5:4', '4:5', '21:9'],
-                        default: '1:1',
+                        label: 'Aspect Ratio (optional - not all models support)',
+                        options: ['', 'Auto', '1:1', '9:16', '16:9', '3:4', '4:3', '3:2', '2:3', '5:4', '4:5', '21:9'],
+                        default: '',
                         required: false
                     },
                     {
                         name: 'sampleCount',
                         type: 'number',
-                        label: 'Sample Count (1-10)',
-                        default: 1,
+                        label: 'Sample Count (optional, 1-10)',
+                        placeholder: '',
+                        default: '',
                         required: false,
                         min: 1,
                         max: 10
@@ -405,13 +419,10 @@
                 ],
                 exampleRequest: {
                     prompt: "A cute cat sitting on a couch",
-                    mode: "draft",
-                    resolution: "1K",
-                    aspectRatio: "16:9",
-                    sampleCount: 2
+                    mode: "draft"
                 },
                 exampleResponse: {
-                    jobId: "clx1234567890",
+                    jobId: "cmkxvg19k0001n893m6b644l1",
                     status: "QUEUED"
                 }
             },
@@ -441,13 +452,13 @@
                 exampleResponse: {
                     items: [
                         {
-                            id: "clx1234567890",
+                            id: "cmkxvg19k0001n893m6b644l1",
                             status: "SUCCEEDED",
                             prompt: "A cute cat",
                             mode: "draft",
-                            resultUrls: ["https://cdn.example.com/image1.png"],
-                            createdAt: "2026-01-26T10:00:00.000Z",
-                            updatedAt: "2026-01-26T10:00:05.000Z"
+                            resultUrls: ["https://assets.sendto.you/cmkxvg19k.../image.png"],
+                            createdAt: "2026-01-28T10:00:00.000Z",
+                            updatedAt: "2026-01-28T10:00:07.000Z"
                         }
                     ],
                     hasMore: false
@@ -463,18 +474,18 @@
                         name: 'jobId',
                         type: 'text',
                         label: 'Job ID',
-                        placeholder: 'clx1234567890',
+                        placeholder: 'cmkxvg19k0001n893m6b644l1',
                         required: true,
                         isPathParam: true
                     }
                 ],
                 exampleResponse: {
-                    jobId: "clx1234567890",
+                    jobId: "cmkxvg19k0001n893m6b644l1",
                     status: "SUCCEEDED",
-                    resultUrls: ["https://cdn.example.com/image1.png"],
+                    resultUrls: ["https://assets.sendto.you/cmkxvg19k.../image.png"],
                     error: null,
-                    createdAt: "2026-01-26T10:00:00.000Z",
-                    updatedAt: "2026-01-26T10:00:05.000Z"
+                    createdAt: "2026-01-28T10:00:00.000Z",
+                    updatedAt: "2026-01-28T10:00:07.000Z"
                 }
             },
             {
@@ -487,13 +498,13 @@
                         name: 'jobId',
                         type: 'text',
                         label: 'Job ID',
-                        placeholder: 'clx1234567890',
+                        placeholder: 'cmkxvg19k0001n893m6b644l1',
                         required: true,
                         isPathParam: true
                     }
                 ],
                 exampleResponse: {
-                    jobId: "clx1234567890",
+                    jobId: "cmkxvg19k0001n893m6b644l1",
                     status: "CANCELED"
                 }
             }
@@ -508,11 +519,13 @@
                 
                 if (param.type === 'select') {
                     const options = param.options.map(opt => 
-                        `<option value="${opt}" ${opt === param.default ? 'selected' : ''}>${opt || 'All'}</option>`
+                        `<option value="${opt}" ${opt === param.default ? 'selected' : ''}>${opt || '(not set)'}</option>`
                     ).join('');
                     inputHtml = `<select class="param-select" id="param-${index}-${param.name}" ${param.required ? 'required' : ''}>${options}</select>`;
+                } else if (param.type === 'number') {
+                    inputHtml = `<input type="number" class="param-input" id="param-${index}-${param.name}" placeholder="${param.placeholder || ''}" ${param.required ? 'required' : ''} ${param.min ? `min="${param.min}"` : ''} ${param.max ? `max="${param.max}"` : ''}>`;
                 } else {
-                    inputHtml = `<input type="${param.type}" class="param-input" id="param-${index}-${param.name}" placeholder="${param.placeholder}" ${param.required ? 'required' : ''}>`;
+                    inputHtml = `<input type="${param.type}" class="param-input" id="param-${index}-${param.name}" placeholder="${param.placeholder || ''}" ${param.required ? 'required' : ''}>`;
                 }
                 
                 paramsHtml += `
@@ -619,18 +632,28 @@
                 let headers = {};
                 
                 spec.params.forEach(param => {
-                    const value = document.getElementById(`param-${index}-${param.name}`).value;
+                    const inputEl = document.getElementById(`param-${index}-${param.name}`);
+                    let value = inputEl.value;
+                    
+                    // Skip empty values
+                    if (value === '' || value === null || value === undefined) {
+                        return;
+                    }
+                    
+                    // Convert number type
+                    if (param.type === 'number' && value) {
+                        value = parseInt(value, 10);
+                        if (isNaN(value)) return;
+                    }
                     
                     if (param.isHeader) {
-                        if (value) headers[param.name] = value;
+                        headers[param.name] = value;
                     } else if (param.isPathParam) {
                         url = url.replace(`{${param.name}}`, value);
                     } else if (spec.method === 'GET' || spec.method === 'DELETE') {
                         const separator = url.includes('?') ? '&' : '?';
-                        if (value) {
-                            url += `${separator}${param.name}=${encodeURIComponent(value)}`;
-                        }
-                    } else if (value && !param.isPathParam) {
+                        url += `${separator}${param.name}=${encodeURIComponent(value)}`;
+                    } else {
                         if (!body) body = {};
                         body[param.name] = value;
                     }

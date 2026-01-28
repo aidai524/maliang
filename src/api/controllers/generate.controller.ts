@@ -7,10 +7,30 @@ import { createLogger } from '../../utils/logger';
 
 const logger = createLogger('generate');
 
+// Constants
+const MAX_IMAGE_SIZE_KB = 500;
+const MAX_IMAGE_SIZE_BYTES = MAX_IMAGE_SIZE_KB * 1024;
+
+// Base64 image regex: data:image/(png|jpeg|jpg|gif|webp);base64,xxxxx
+const BASE64_IMAGE_REGEX = /^data:image\/(png|jpeg|jpg|gif|webp);base64,[A-Za-z0-9+/]+=*$/;
+
 // Validation schemas
 export const GenerateBodySchema = z.object({
   prompt: z.string().min(1),
-  inputImageUrl: z.string().url().optional(),
+  inputImage: z.string()
+    .regex(BASE64_IMAGE_REGEX, 'Invalid base64 image format. Expected: data:image/<type>;base64,<data>')
+    .refine(
+      (val) => {
+        // Extract base64 data part and check size
+        const base64Data = val.split(',')[1];
+        if (!base64Data) return false;
+        // Base64 string length * 0.75 ≈ actual bytes
+        const estimatedBytes = base64Data.length * 0.75;
+        return estimatedBytes <= MAX_IMAGE_SIZE_BYTES;
+      },
+      { message: `Image size exceeds ${MAX_IMAGE_SIZE_KB}KB limit` }
+    )
+    .optional(),
   mode: z.enum(['draft', 'final']).optional(),
   resolution: z.enum(['1K', '2K', '4K']).optional(),
   aspectRatio: z.enum(['Auto', '1:1', '9:16', '16:9', '3:4', '4:3', '3:2', '2:3', '5:4', '4:5', '21:9']).optional(),
@@ -35,7 +55,7 @@ export async function generate(req: Request, res: Response): Promise<void> {
     tenantId: tenant.id,
     prompt: body.prompt.substring(0, 100),
     mode: body.mode,
-    hasInputImage: !!body.inputImageUrl,
+    hasInputImage: !!body.inputImage,
     idempotencyKey,
   });
 
@@ -45,7 +65,7 @@ export async function generate(req: Request, res: Response): Promise<void> {
     tenantId: tenant.id,
     idempotencyKey,
     prompt: body.prompt,
-    inputImageUrl: body.inputImageUrl,
+    inputImage: body.inputImage,
     mode: body.mode || 'final',
     resolution: body.resolution,      // Optional - some models don't support it
     aspectRatio: body.aspectRatio,    // Optional - some models don't support it

@@ -206,7 +206,7 @@ export const generateWorker = new Worker<GenerateJobData>(
       const result = await geminiGenerate({
         apiKey: providerKey.secret,
         prompt: dbJob.prompt,
-        inputImageUrl: dbJob.inputImageUrl ?? undefined,
+        inputImage: dbJob.inputImage ?? undefined,
         mode: dbJob.mode as 'draft' | 'final',
         resolution: dbJob.resolution as '1K' | '2K' | '4K' | undefined,
         aspectRatio: dbJob.aspectRatio as 'Auto' | '1:1' | '9:16' | '16:9' | '3:4' | '4:3' | '3:2' | '2:3' | '5:4' | '4:5' | '21:9' | undefined,

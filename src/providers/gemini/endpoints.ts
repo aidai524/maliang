@@ -41,14 +41,7 @@ export const GEMINI_ENDPOINTS: Record<string, EndpointConfig> = {
     baseUrl: 'https://yunwu.ai',
     authType: 'bearer',
     priority: 2,
-    // 云雾只支持部分 Gemini 模型（不支持 gemini-2.0-flash-exp-image-generation）
-    supportedModels: [
-      'gemini-2.5-flash-image',
-      'gemini-2.5-flash-image-preview',
-      'gemini-3-pro-image-preview',
-    ],
-    // 云雾对 gemini-3-pro-image-preview 支持更稳定
-    preferredModels: ['gemini-3-pro-image-preview'],
+    // 不限制模型，由 API 层返回错误
   },
 };
 

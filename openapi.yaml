@@ -84,11 +84,14 @@ paths:
                   description: Text prompt for image generation
                   minLength: 1
                   example: A photorealistic product photo of a tea canister on a white background
-                inputImageUrl:
+                inputImage:
                   type: string
-                  format: uri
-                  description: Optional reference image for img2img
-                  example: https://example.com/reference.png
+                  description: |
+                    Optional reference image for img2img in base64 format.
+                    Format: data:image/<type>;base64,<data>
+                    Supported types: png, jpeg, jpg, gif, webp
+                    Maximum size: 500KB
+                  example: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==
                 mode:
                   type: string
                   enum: [draft, final]

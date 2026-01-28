@@ -22,7 +22,9 @@ app.use((req, res, next) => {
 });
 
 // Body parser with raw body support for webhooks
+// Increased limit to 2MB to support base64 image uploads (500KB image ≈ 700KB base64)
 app.use(express.json({
+  limit: '2mb',
   verify: (req: any, _res, buf) => {
     req.rawBody = buf.toString('utf8');
   },

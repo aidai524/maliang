@@ -13,7 +13,8 @@ export type GeminiEndpoint = 'official' | 'yunwu' | string;
 export type GeminiGenerateOptions = {
   apiKey: string;
   prompt: string;
-  inputImageUrl?: string;
+  /** Base64 encoded image data (format: data:image/<type>;base64,<data>) */
+  inputImage?: string;
   mode?: GeminiMode;
   resolution?: GeminiResolution;
   aspectRatio?: GeminiAspectRatios;

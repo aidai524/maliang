@@ -50,7 +50,7 @@ model ProviderKey {
   mode              String   @default("final")  // draft/final
 
   prompt            String
-  inputImageUrl     String?  // 参考图（若有）
+  inputImage        String?  @db.Text // 参考图 Base64 数据（若有）
   resultUrls        Json?
   errorCode         String?
   errorMessage      String?

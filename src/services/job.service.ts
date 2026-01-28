@@ -8,7 +8,8 @@ export type CreateJobOptions = {
   tenantId: string;
   idempotencyKey?: string;
   prompt: string;
-  inputImageUrl?: string;
+  /** Base64 encoded image data (format: data:image/<type>;base64,<data>) */
+  inputImage?: string;
   mode?: 'draft' | 'final';
   resolution?: '1K' | '2K' | '4K';
   aspectRatio?: 'Auto' | '1:1' | '9:16' | '16:9' | '3:4' | '4:3' | '3:2' | '2:3' | '5:4' | '4:5' | '21:9';
@@ -33,7 +34,7 @@ export async function createJob(options: CreateJobOptions) {
     tenantId,
     idempotencyKey,
     prompt,
-    inputImageUrl,
+    inputImage,
     mode = 'final',
     resolution,       // Optional - not all models support it
     aspectRatio,      // Optional - not all models support it
@@ -66,7 +67,7 @@ export async function createJob(options: CreateJobOptions) {
       tenantId,
       idempotencyKey,
       prompt,
-      inputImageUrl,
+      inputImage,
       mode,
       status: 'QUEUED',
       maxAttempts,

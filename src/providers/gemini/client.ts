@@ -19,9 +19,22 @@ const logger = createLogger('gemini');
 const DEFAULT_ENDPOINT = 'official';
 const DEFAULT_MODEL = 'gemini-3.0-pro-vision';
 
+/**
+ * Parse base64 image data URL and extract mimeType and data
+ * Format: data:image/<type>;base64,<data>
+ */
+function parseBase64Image(dataUrl: string): { mimeType: string; data: string } | null {
+  const match = dataUrl.match(/^data:(image\/[a-z]+);base64,(.+)$/i);
+  if (!match) return null;
+  return {
+    mimeType: match[1],
+    data: match[2],
+  };
+}
+
 function buildGeminiRequest(
   prompt: string,
-  inputImageUrl: string | undefined,
+  inputImage: string | undefined,
   mode: GeminiMode,
   resolution?: GeminiResolution,
   aspectRatio?: GeminiAspectRatios,
@@ -52,6 +65,19 @@ function buildGeminiRequest(
 
   const parts: any[] = [];
 
+  // Add input image first if provided (reference image)
+  if (inputImage) {
+    const parsed = parseBase64Image(inputImage);
+    if (parsed) {
+      parts.push({
+        inlineData: {
+          mimeType: parsed.mimeType,
+          data: parsed.data,
+        },
+      });
+    }
+  }
+
   // Prepend "Generate an image of" to help the model understand the intent
   const imagePrompt = `Generate an image: ${prompt}`;
 
@@ -61,15 +87,6 @@ function buildGeminiRequest(
     }
   } else {
     parts.push({ text: imagePrompt });
-  }
-
-  if (inputImageUrl) {
-    parts.push({
-      inlineData: {
-        mimeType: 'image/png',
-        data: inputImageUrl,
-      },
-    });
   }
 
   return {
@@ -89,7 +106,7 @@ export async function geminiSubmit(
   const { 
     apiKey, 
     prompt, 
-    inputImageUrl, 
+    inputImage, 
     mode = 'final', 
     resolution, 
     aspectRatio, 
@@ -103,7 +120,7 @@ export async function geminiSubmit(
 
   const requestBody = buildGeminiRequest(
     prompt,
-    inputImageUrl,
+    inputImage,
     mode || 'final',
     resolution,
     aspectRatio,
@@ -117,7 +134,7 @@ export async function geminiSubmit(
     endpoint,
     model,
     mode: mode || 'final',
-    hasInputImage: !!inputImageUrl,
+    hasInputImage: !!inputImage,
     resolution,
     aspectRatio,
     sampleCount,

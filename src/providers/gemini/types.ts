@@ -16,10 +16,12 @@ export type GeminiGenerateOptions = {
   resolution?: GeminiResolution;
   aspectRatio?: GeminiAspectRatios;
   sampleCount?: number;
+  model?: string;
 };
 
 export type GeminiSubmitResult = {
   requestId: string;
+  model: string;
 };
 
 export type GeminiStatusResult =
@@ -31,11 +33,11 @@ export type GenerationConfig = {
   topK?: number;
   topP?: number;
   maxOutputTokens?: number;
-  imageSize?: '1K' | '2K';
-  aspectRatio?: string | number;
-  numberOfImages?: number;
-  // Enable image output from Gemini
-  responseModalities?: ('TEXT' | 'IMAGE')[];
+  imageConfig?: {
+    imageSize?: '1K' | '2K' | '4K';
+    aspectRatio?: string;
+    numberOfImages?: number;
+  };
 };
 
 export type GeminiPart =

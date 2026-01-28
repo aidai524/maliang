@@ -93,7 +93,7 @@ paths:
           application/json:
             schema:
               type: object
-               required:
+                  required:
                 - prompt
               properties:
                 prompt:
@@ -120,9 +120,9 @@ paths:
                   default: 1K
                 aspectRatio:
                   type: string
-                  enum: [1:1, 9:16, 16:9, 4:3, 3:2, 2:3, 5:4, 4:5, 21:9]
+                  enum: ['1:1', '9:16', '16:9', '4:3', '3:2', '2:3', '5:4', '4:5', '21:9']
                   description: Image aspect ratio
-                  default: 1:1
+                  default: '1:1'
                 sampleCount:
                   type: integer
                   minimum: 1

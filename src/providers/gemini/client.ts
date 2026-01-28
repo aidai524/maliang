@@ -33,22 +33,16 @@ function buildGeminiRequest(
   };
 
   if (resolution) {
-    generationConfig.topK = resolution === '1:1' ? 1 : resolution === '4:3' ? 4 : undefined;
+    generationConfig.imageConfig = {
+      imageSize: resolution,
+    };
   }
 
   if (aspectRatio) {
-    const aspectRatioMap: Record<GeminiAspectRatios, number> = {
-      '1:1': 1,
-      '9:16': 9,
-      '16:9': 16,
-      '4:3': 4,
-      '3:2': 3,
-      '2:3': 2,
-      '5:4': 5,
-      '4:5': 4,
-      '21:9': 21,
-    };
-    generationConfig.topP = aspectRatioMap[aspectRatio];
+    if (!generationConfig.imageConfig) {
+      generationConfig.imageConfig = {};
+    }
+    generationConfig.imageConfig.aspectRatio = aspectRatio;
   }
 
   const parts: any[] = [];
@@ -87,10 +81,10 @@ function buildGeminiRequest(
 export async function geminiSubmit(
   options: GeminiGenerateOptions
 ): Promise<GeminiSubmitResult> {
-  const { apiKey, prompt, inputImageUrl, mode, resolution, aspectRatio, sampleCount } = options;
+  const { apiKey, prompt, inputImageUrl, mode = 'final', resolution, aspectRatio, sampleCount, model: optionModel } = options;
 
   const apiBase = config.gemini.apiBase || DEFAULT_API_BASE;
-  const model = config.gemini.model || DEFAULT_MODEL;
+  const model = optionModel || config.gemini.model || DEFAULT_MODEL;
 
   const requestBody = buildGeminiRequest(
     prompt,
@@ -134,7 +128,7 @@ export async function geminiSubmit(
 
     logger.info('Gemini submit successful', { requestId });
 
-    return { requestId };
+    return { requestId, model };
   } catch (error) {
     if (error instanceof ProviderError) {
       throw error;
@@ -170,25 +164,66 @@ export async function geminiGenerate(
   pollOptions: {
     maxAttempts?: number;
     intervalMs?: number;
+    enableFallback?: boolean;
   } = {}
-): Promise<GeminiStatusResult & { status: 'SUCCEEDED' | 'FAILED' }> {
-  const { maxAttempts = 30, intervalMs = 2000 } = pollOptions;
+): Promise<GeminiStatusResult & { status: 'SUCCEEDED' | 'FAILED'; model?: string }> {
+  const { maxAttempts = 60, intervalMs = 3000, enableFallback = true } = pollOptions;
 
-  const { requestId } = await geminiSubmit(options);
+  const { requestId, model } = await geminiSubmit(options);
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const result = await geminiPoll(requestId, options.apiKey);
+    try {
+      const result = await geminiPoll(requestId, options.apiKey);
 
-    if (result.status === 'SUCCEEDED' || result.status === 'FAILED') {
-      return result as any;
+      if (result.status === 'SUCCEEDED') {
+        return { status: result.status, images: result.images, model };
+      }
+
+      if (result.status === 'FAILED') {
+        return { status: result.status, error: result.error, model };
+      }
+
+      await sleep(intervalMs);
+    } catch (error) {
+      const isProviderError = error instanceof ProviderError;
+
+      if (isProviderError) {
+        const providerError = error as ProviderError;
+
+        if (providerError.code === 'SERVICE_OVERLOAD' && enableFallback) {
+          logger.info('503 error detected, enabling fallback strategy', { attempt });
+
+          try {
+            const fallbackModel = 'gemini-2.5-flash-image-preview';
+            const fallbackOptions = { ...options, model: fallbackModel };
+
+            logger.info('Retrying with fallback model', { fallbackModel });
+            const { requestId: fallbackRequestId } = await geminiSubmit(fallbackOptions as any);
+
+            const fallbackResult = await geminiPoll(fallbackRequestId, options.apiKey);
+
+            if (fallbackResult.status === 'SUCCEEDED') {
+              return { status: fallbackResult.status, images: fallbackResult.images, model: fallbackModel };
+            }
+
+            if (fallbackResult.status === 'FAILED') {
+              return { status: fallbackResult.status, error: fallbackResult.error, model: fallbackModel };
+            }
+          } catch (fallbackError: any) {
+            logger.error('Fallback model also failed', { error: fallbackError.message });
+            throw fallbackError;
+          }
+        }
+      }
+
+      throw error;
     }
-
-    await sleep(intervalMs);
   }
 
   return {
     status: 'FAILED',
-    error: 'Poll timeout',
+    error: 'Max attempts reached',
+    model,
   };
 }
 
@@ -205,6 +240,10 @@ function handleGeminiError(status: number, errorText: string): never {
   } else if (status === 429) {
     code = 'RATE_LIMIT_EXCEEDED';
     retryable = true;
+  } else if (status === 503) {
+    code = 'SERVICE_OVERLOAD';
+    retryable = true;
+    logger.warn('Gemini API 503 - Service overloaded', { status, errorText });
   } else if (status >= 500) {
     code = 'SERVER_ERROR';
     retryable = true;

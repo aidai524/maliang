@@ -106,7 +106,7 @@ curl http://localhost:3001/health
 |------|------|------|------|
 | `prompt` | string | 是 | 图片生成的文本描述 |
 | `mode` | string | 否 | 生成模式：`draft`(快速/低质量) 或 `final`(高质量)，默认 `final` |
-| `inputImageUrl` | string | 否 | 参考图片 URL (用于 img2img) |
+| `inputImage` | string | 否 | Base64 格式参考图片，用于**锁脸**功能（保持面部特征一致）。格式：`data:image/<type>;base64,<data>`，最大 4MB |
 | `resolution` | string | 否 | 图片分辨率：`1K`, `2K`, `4K`。可选参数，部分模型可能不支持 |
 | `aspectRatio` | string | 否 | 宽高比：`Auto`, `1:1`, `9:16`, `16:9`, `3:4`, `4:3`, `3:2`, `2:3`, `5:4`, `4:5`, `21:9`。可选参数，部分模型可能不支持 |
 | `sampleCount` | number | 否 | 生成图片数量 (1-10)。可选参数 |
@@ -134,6 +134,18 @@ curl -X POST http://localhost:3001/v1/images/generate \
     "aspectRatio": "16:9",
     "sampleCount": 2
   }'
+
+# 锁脸功能 - 保持面部特征一致
+curl -X POST http://localhost:3001/v1/images/generate \
+  -H "Authorization: Bearer img_test_dev_123456789" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "Professional corporate headshot portrait, wearing formal business attire, clean neutral background",
+    "inputImage": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD...",
+    "resolution": "1K",
+    "aspectRatio": "1:1",
+    "mode": "draft"
+  }'
 ```
 
 **响应示例:**
@@ -152,6 +164,47 @@ curl -X POST http://localhost:3001/v1/images/generate \
 - `429 Too Many Requests` - 超出速率限制
 
 **注意:** `resolution` 和 `aspectRatio` 参数是可选的，某些模型（如 `gemini-2.0-flash-exp-image-generation`）可能不支持这些参数。如果不传入，将使用模型默认设置。
+
+---
+
+### Face Lock (锁脸功能)
+
+通过提供参考图片，可以让 AI 生成保持相同面部特征的新图片。这对于生成同一人物的不同场景/造型照片非常有用。
+
+**使用方法：**
+
+1. 将参考图片转换为 Base64 格式
+2. 在请求中添加 `inputImage` 字段
+3. 在 `prompt` 中描述想要生成的新场景/造型
+
+**请求示例：**
+
+```bash
+# 将图片转换为 base64
+BASE64_IMAGE=$(base64 -i reference-photo.jpg | tr -d '\n')
+
+# 发送锁脸生成请求
+curl -X POST http://localhost:3001/v1/images/generate \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "Professional corporate headshot portrait, wearing formal business attire, clean neutral background, soft studio lighting, confident expression",
+    "inputImage": "data:image/jpeg;base64,'"$BASE64_IMAGE"'",
+    "resolution": "1K",
+    "aspectRatio": "1:1"
+  }'
+```
+
+**锁脸效果：**
+- ✅ 保持脸型轮廓一致
+- ✅ 保持五官特征相似
+- ✅ 保持发型风格
+- ✅ 可以更换服装、背景、表情等
+
+**限制：**
+- 参考图片最大 **4MB**
+- 支持格式：`image/jpeg`, `image/png`, `image/gif`, `image/webp`
+- 图片需要清晰展示面部特征效果最佳
 
 ---
 

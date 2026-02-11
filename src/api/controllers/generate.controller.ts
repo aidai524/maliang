@@ -8,8 +8,9 @@ import { createLogger } from '../../utils/logger';
 const logger = createLogger('generate');
 
 // Constants
-const MAX_IMAGE_SIZE_KB = 500;
-const MAX_IMAGE_SIZE_BYTES = MAX_IMAGE_SIZE_KB * 1024;
+// 锁脸功能需要高清参考图片，提高限制到 4MB
+const MAX_IMAGE_SIZE_MB = 4;
+const MAX_IMAGE_SIZE_BYTES = MAX_IMAGE_SIZE_MB * 1024 * 1024;
 
 // Base64 image regex: data:image/(png|jpeg|jpg|gif|webp);base64,xxxxx
 const BASE64_IMAGE_REGEX = /^data:image\/(png|jpeg|jpg|gif|webp);base64,[A-Za-z0-9+/]+=*$/;
@@ -28,7 +29,7 @@ export const GenerateBodySchema = z.object({
         const estimatedBytes = base64Data.length * 0.75;
         return estimatedBytes <= MAX_IMAGE_SIZE_BYTES;
       },
-      { message: `Image size exceeds ${MAX_IMAGE_SIZE_KB}KB limit` }
+      { message: `Image size exceeds ${MAX_IMAGE_SIZE_MB}MB limit` }
     )
     .optional(),
   mode: z.enum(['draft', 'final']).optional(),

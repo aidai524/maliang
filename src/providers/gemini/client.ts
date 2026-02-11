@@ -32,6 +32,13 @@ function parseBase64Image(dataUrl: string): { mimeType: string; data: string } |
   };
 }
 
+/**
+ * 构建 Gemini API 请求体
+ * 
+ * 重要：使用 snake_case 字段命名以匹配 Gemini API 规范
+ * - inline_data (不是 inlineData)
+ * - mime_type (不是 mimeType)
+ */
 function buildGeminiRequest(
   prompt: string,
   inputImage: string | undefined,
@@ -40,13 +47,12 @@ function buildGeminiRequest(
   aspectRatio?: GeminiAspectRatios,
   sampleCount?: number,
 ) {
-  const generationConfig: GenerationConfig = {
-    temperature: mode === 'draft' ? 0.7 : 1,
-    // Enable image generation output
+  // 构建 generationConfig
+  const generationConfig: Record<string, any> = {
     responseModalities: ['TEXT', 'IMAGE'],
   };
 
-  // Set image configuration if resolution or aspectRatio is provided
+  // 设置图片配置（如果有指定）
   if (resolution || aspectRatio || sampleCount) {
     generationConfig.imageConfig = {};
     
@@ -65,34 +71,42 @@ function buildGeminiRequest(
 
   const parts: any[] = [];
 
-  // Add input image first if provided (reference image)
+  // 构建 prompt：如果有参考图片，使用锁脸专用 prompt 格式
+  let finalPrompt: string;
+  if (inputImage) {
+    // 锁脸场景：使用专用指令，确保模型理解需要保持面部特征一致
+    finalPrompt = `Please reference the facial features from the following character images and generate an image that matches the requirements. Maintain consistent facial characteristics, face shape, and key features.\n\n${prompt}`;
+  } else {
+    // 普通生成场景
+    finalPrompt = prompt;
+  }
+
+  // 先添加文本 prompt
+  parts.push({ text: finalPrompt });
+
+  // 再添加参考图片（使用 snake_case 格式）
   if (inputImage) {
     const parsed = parseBase64Image(inputImage);
     if (parsed) {
       parts.push({
-        inlineData: {
-          mimeType: parsed.mimeType,
+        inline_data: {
+          mime_type: parsed.mimeType,
           data: parsed.data,
         },
       });
     }
   }
 
-  // Prepend "Generate an image of" to help the model understand the intent
-  const imagePrompt = `Generate an image: ${prompt}`;
-
+  // 如果需要多张图片，复制文本 prompt
   if (sampleCount && sampleCount > 1) {
-    for (let i = 0; i < sampleCount; i++) {
-      parts.push({ text: imagePrompt });
+    for (let i = 1; i < sampleCount; i++) {
+      parts.push({ text: finalPrompt });
     }
-  } else {
-    parts.push({ text: imagePrompt });
   }
 
   return {
     contents: [
       {
-        role: 'user',
         parts,
       },
     ],
@@ -349,12 +363,18 @@ function parseGeminiResponse(data: any): GeminiStatusResult {
   const images: Array<{ url: string; mimeType: string }> = [];
 
   for (const part of parts) {
-    if (part.inlineData) {
-      const { mimeType, data: base64Data } = part.inlineData;
-      images.push({
-        url: `data:${mimeType};base64,${base64Data}`,
-        mimeType,
-      });
+    // 支持 camelCase (inlineData) 和 snake_case (inline_data) 两种格式
+    const inlineData = part.inlineData || part.inline_data;
+    if (inlineData) {
+      // 同时支持 mimeType 和 mime_type
+      const mimeType = inlineData.mimeType || inlineData.mime_type;
+      const base64Data = inlineData.data;
+      if (mimeType && base64Data) {
+        images.push({
+          url: `data:${mimeType};base64,${base64Data}`,
+          mimeType,
+        });
+      }
     }
   }
 

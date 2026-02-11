@@ -358,7 +358,7 @@
                 method: 'POST',
                 path: '/v1/images/generate',
                 title: 'Submit Image Generation',
-                description: '提交一个新的图片生成任务。任务将异步处理，结果可以通过轮询或 Webhook 回调获取。<br><br><strong>多端点负载均衡：</strong> 系统自动在官方 Gemini API 和云雾代理之间分配请求，官方 503 时自动切换到备用端点。<br><br><strong>模型兼容性：</strong><br>• <code>gemini-3-pro-image-preview</code> - 支持 4K，优先使用云雾端点<br>• <code>gemini-2.5-flash-image</code> - 官方和云雾都支持，不支持 resolution<br>• <code>gemini-2.0-flash-exp-image-generation</code> - 仅官方支持<br><br><strong>注意：</strong> <code>resolution</code> 和 <code>aspectRatio</code> 参数是可选的，部分模型不支持这些参数。',
+                description: '提交一个新的图片生成任务。任务将异步处理，结果可以通过轮询或 Webhook 回调获取。<br><br><strong>🎭 锁脸功能：</strong> 通过 <code>inputImage</code> 参数提供 Base64 格式的参考图片，AI 会保持相同的面部特征生成新图片。适用于生成同一人物的不同场景/造型照片。最大支持 4MB 图片。<br><br><strong>多端点负载均衡：</strong> 系统自动在官方 Gemini API 和云雾代理之间分配请求，官方 503 时自动切换到备用端点。<br><br><strong>模型兼容性：</strong><br>• <code>gemini-3-pro-image-preview</code> - 支持 4K，优先使用云雾端点<br>• <code>gemini-2.5-flash-image</code> - 官方和云雾都支持，不支持 resolution<br>• <code>gemini-2.0-flash-exp-image-generation</code> - 仅官方支持<br><br><strong>注意：</strong> <code>resolution</code> 和 <code>aspectRatio</code> 参数是可选的，部分模型不支持这些参数。',
                 params: [
                     {
                         name: 'prompt',
@@ -376,10 +376,10 @@
                         required: false
                     },
                     {
-                        name: 'inputImageUrl',
-                        type: 'text',
-                        label: 'Input Image URL (optional)',
-                        placeholder: 'https://example.com/reference.png',
+                        name: 'inputImage',
+                        type: 'textarea',
+                        label: 'Input Image - Base64 (锁脸功能，可选，最大4MB)',
+                        placeholder: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD...',
                         required: false
                     },
                     {
@@ -524,6 +524,8 @@
                     inputHtml = `<select class="param-select" id="param-${index}-${param.name}" ${param.required ? 'required' : ''}>${options}</select>`;
                 } else if (param.type === 'number') {
                     inputHtml = `<input type="number" class="param-input" id="param-${index}-${param.name}" placeholder="${param.placeholder || ''}" ${param.required ? 'required' : ''} ${param.min ? `min="${param.min}"` : ''} ${param.max ? `max="${param.max}"` : ''}>`;
+                } else if (param.type === 'textarea') {
+                    inputHtml = `<textarea class="param-input" id="param-${index}-${param.name}" placeholder="${param.placeholder || ''}" ${param.required ? 'required' : ''} rows="3" style="resize: vertical;"></textarea>`;
                 } else {
                     inputHtml = `<input type="${param.type}" class="param-input" id="param-${index}-${param.name}" placeholder="${param.placeholder || ''}" ${param.required ? 'required' : ''}>`;
                 }

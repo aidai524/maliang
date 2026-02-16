@@ -8,13 +8,19 @@ export type CreateJobOptions = {
   tenantId: string;
   idempotencyKey?: string;
   prompt: string;
-  /** Base64 encoded image data (format: data:image/<type>;base64,<data>) */
+  /** Base64 encoded image data (format: data:image/<type>;base64,<data>) - 兼容旧 API */
   inputImage?: string;
+  /** 多张参考图 */
+  referenceImages?: string[];
+  /** 生成模式: text_to_image (文生图) | image_to_image (图生图) */
+  generationMode?: 'text_to_image' | 'image_to_image';
   mode?: 'draft' | 'final';
   resolution?: '1K' | '2K' | '4K';
-  aspectRatio?: 'Auto' | '1:1' | '9:16' | '16:9' | '3:4' | '4:3' | '3:2' | '2:3' | '5:4' | '4:5' | '21:9';
+  aspectRatio?: 'Auto' | '1:1' | '9:16' | '16:9' | '3:4' | '4:3' | '3:2' | '2:3' | '5:4' | '4:5' | '21:9' | '9:21';
   sampleCount?: number;
   maxAttempts?: number;
+  /** AI provider: gemini (default) or jimeng (即梦AI) */
+  provider?: 'gemini' | 'jimeng';
 };
 
 export type JobStatus = {
@@ -35,11 +41,14 @@ export async function createJob(options: CreateJobOptions) {
     idempotencyKey,
     prompt,
     inputImage,
+    referenceImages,
+    generationMode = 'text_to_image',
     mode = 'final',
-    resolution,       // Optional - not all models support it
-    aspectRatio,      // Optional - not all models support it
-    sampleCount,      // Optional
+    resolution,
+    aspectRatio,
+    sampleCount,
     maxAttempts = 4,
+    provider = 'gemini',
   } = options;
 
   // Check for idempotency key duplicate
@@ -68,19 +77,24 @@ export async function createJob(options: CreateJobOptions) {
       idempotencyKey,
       prompt,
       inputImage,
+      referenceImages: referenceImages && referenceImages.length > 0 ? referenceImages : undefined,
+      generationMode,
       mode,
       status: 'QUEUED',
       maxAttempts,
       resolution,
       aspectRatio,
       sampleCount,
+      provider,
     },
   });
 
   logger.info('Job created', {
     jobId: job.id,
     tenantId,
-    mode,
+    generationMode,
+    provider,
+    referenceImageCount: referenceImages?.length || 0,
     idempotencyKey,
   });
 

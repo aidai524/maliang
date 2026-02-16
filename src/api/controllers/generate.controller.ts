@@ -11,31 +11,56 @@ const logger = createLogger('generate');
 // 锁脸功能需要高清参考图片，提高限制到 4MB
 const MAX_IMAGE_SIZE_MB = 4;
 const MAX_IMAGE_SIZE_BYTES = MAX_IMAGE_SIZE_MB * 1024 * 1024;
+const MAX_REFERENCE_IMAGES = 5;
 
 // Base64 image regex: data:image/(png|jpeg|jpg|gif|webp);base64,xxxxx
 const BASE64_IMAGE_REGEX = /^data:image\/(png|jpeg|jpg|gif|webp);base64,[A-Za-z0-9+/]+=*$/;
 
+// Supported providers
+const SUPPORTED_PROVIDERS = ['gemini', 'jimeng'] as const;
+type Provider = typeof SUPPORTED_PROVIDERS[number];
+
+// Generation modes
+const GENERATION_MODES = ['text_to_image', 'image_to_image'] as const;
+type GenerationMode = typeof GENERATION_MODES[number];
+
+// Image size validator
+const base64ImageSchema = z.string()
+  .regex(BASE64_IMAGE_REGEX, 'Invalid base64 image format. Expected: data:image/<type>;base64,<data>')
+  .refine(
+    (val) => {
+      const base64Data = val.split(',')[1];
+      if (!base64Data) return false;
+      const estimatedBytes = base64Data.length * 0.75;
+      return estimatedBytes <= MAX_IMAGE_SIZE_BYTES;
+    },
+    { message: `Image size exceeds ${MAX_IMAGE_SIZE_MB}MB limit` }
+  );
+
 // Validation schemas
 export const GenerateBodySchema = z.object({
   prompt: z.string().min(1),
-  inputImage: z.string()
-    .regex(BASE64_IMAGE_REGEX, 'Invalid base64 image format. Expected: data:image/<type>;base64,<data>')
-    .refine(
-      (val) => {
-        // Extract base64 data part and check size
-        const base64Data = val.split(',')[1];
-        if (!base64Data) return false;
-        // Base64 string length * 0.75 ≈ actual bytes
-        const estimatedBytes = base64Data.length * 0.75;
-        return estimatedBytes <= MAX_IMAGE_SIZE_BYTES;
-      },
-      { message: `Image size exceeds ${MAX_IMAGE_SIZE_MB}MB limit` }
-    )
+  
+  /** @deprecated Use referenceImages instead */
+  inputImage: base64ImageSchema.optional(),
+  
+  /** 参考图片数组 (最多5张) - 用于图生图模式 */
+  referenceImages: z.array(base64ImageSchema)
+    .max(MAX_REFERENCE_IMAGES, `Maximum ${MAX_REFERENCE_IMAGES} reference images allowed`)
     .optional(),
+  
+  /** 生成模式: text_to_image (文生图) | image_to_image (图生图/产品融合) */
+  generationMode: z.enum(GENERATION_MODES).optional(),
+  
+  /** @deprecated 质量模式，建议使用 resolution 控制 */
   mode: z.enum(['draft', 'final']).optional(),
+  
   resolution: z.enum(['1K', '2K', '4K']).optional(),
-  aspectRatio: z.enum(['Auto', '1:1', '9:16', '16:9', '3:4', '4:3', '3:2', '2:3', '5:4', '4:5', '21:9']).optional(),
-  sampleCount: z.number().min(1).max(10).int().optional(),
+  aspectRatio: z.enum(['Auto', '1:1', '9:16', '16:9', '3:4', '4:3', '3:2', '2:3', '5:4', '4:5', '21:9', '9:21']).optional(),
+  sampleCount: z.number().min(1).max(15).int().optional(),
+  
+  /** AI provider: gemini (default) or jimeng (即梦AI) */
+  provider: z.enum(SUPPORTED_PROVIDERS).optional(),
 });
 
 export const GenerateParamsSchema = z.object({
@@ -52,25 +77,39 @@ export async function generate(req: Request, res: Response): Promise<void> {
   const idempotencyKey = req.headers['idempotency-key'] as string | undefined;
   const body = GenerateBodySchema.parse(req.body);
 
+  const provider = body.provider || 'gemini';
+  
+  // 合并 inputImage 和 referenceImages (兼容旧 API)
+  let referenceImages = body.referenceImages || [];
+  if (body.inputImage && referenceImages.length === 0) {
+    referenceImages = [body.inputImage];
+  }
+  
+  // 自动推断生成模式
+  const generationMode = body.generationMode || (referenceImages.length > 0 ? 'image_to_image' : 'text_to_image');
+
   logger.info('Generate request', {
     tenantId: tenant.id,
     prompt: body.prompt.substring(0, 100),
-    mode: body.mode,
-    hasInputImage: !!body.inputImage,
+    generationMode,
+    provider,
+    referenceImageCount: referenceImages.length,
     idempotencyKey,
   });
 
   // Create job (handles idempotency check)
-  // Note: resolution and aspectRatio are optional - not all models support them
   const job = await createJob({
     tenantId: tenant.id,
     idempotencyKey,
     prompt: body.prompt,
-    inputImage: body.inputImage,
+    inputImage: referenceImages[0],           // 主参考图（兼容）
+    referenceImages,                           // 所有参考图
+    generationMode,                            // 生成模式
     mode: body.mode || 'final',
-    resolution: body.resolution,      // Optional - some models don't support it
-    aspectRatio: body.aspectRatio,    // Optional - some models don't support it
-    sampleCount: body.sampleCount,    // Optional
+    resolution: body.resolution,
+    aspectRatio: body.aspectRatio,
+    sampleCount: body.sampleCount,
+    provider,
   });
 
   // If job already existed (idempotency), return it

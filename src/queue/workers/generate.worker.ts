@@ -15,6 +15,7 @@ import { acquireRpm, acquireConcurrency, releaseConcurrency } from '../../servic
 import { putImage } from '../../services/storage.service';
 import { markJobRunning, markJobSucceeded, markJobFailed, updateProviderRequestId, appendJobResultUrl } from '../../services/job.service';
 import { geminiGenerate, getEndpointsByPriority } from '../../providers/gemini';
+import { jimengGenerate } from '../../providers/jimeng';
 import { config } from '../../config/env';
 import { webhookQueue } from '../bull';
 import { isRetryableError, getErrorMessage } from '../../utils/errors';
@@ -69,21 +70,26 @@ export const generateWorker = new Worker<GenerateJobData>(
     let keyConcLimit = 0;
 
     try {
+    // ========== DETERMINE PROVIDER ==========
+    const provider = dbJob.provider || 'gemini';
+    
     // ========== DETERMINE ENDPOINTS TO AVOID ==========
     const excludeEndpoints: string[] = [];
     
-    // Check which endpoints should be avoided due to high 503 rate
-    const endpoints = getEndpointsByPriority();
-    for (const { endpoint } of endpoints) {
-      if (await shouldAvoidEndpoint('gemini', endpoint)) {
-        excludeEndpoints.push(endpoint);
-        logger.info('Excluding endpoint due to high 503 rate', { endpoint });
+    // Check which endpoints should be avoided due to high 503 rate (for gemini)
+    if (provider === 'gemini') {
+      const endpoints = getEndpointsByPriority();
+      for (const { endpoint } of endpoints) {
+        if (await shouldAvoidEndpoint('gemini', endpoint)) {
+          excludeEndpoints.push(endpoint);
+          logger.info('Excluding endpoint due to high 503 rate', { endpoint });
+        }
       }
     }
 
     // ========== PICK PROVIDER KEY ==========
-    const providerKey = await pickProviderKey('gemini', {
-      model: config.gemini.model,
+    const providerKey = await pickProviderKey(provider, {
+      model: provider === 'gemini' ? config.gemini.model : config.jimeng.model,
       excludeEndpoints,
       allowFallback: true,
     });
@@ -192,36 +198,67 @@ export const generateWorker = new Worker<GenerateJobData>(
       }
 
       // ========== CALL PROVIDER ==========
-      logger.info('Cache miss, calling Gemini API', {
+      logger.info(`Cache miss, calling ${provider.toUpperCase()} API`, {
         jobId,
+        provider,
         mode: dbJob.mode,
         promptLength: dbJob.prompt.length,
       });
 
-      // Build fallback endpoints (all endpoints except current one)
-      const fallbackEndpoints = endpoints
-        .map(e => e.endpoint)
-        .filter(e => e !== providerKey.endpoint && !excludeEndpoints.includes(e));
+      let result: { status: 'SUCCEEDED' | 'FAILED'; images?: any[]; error?: string; model?: string; endpoint?: string };
 
-      const result = await geminiGenerate({
-        apiKey: providerKey.secret,
-        prompt: dbJob.prompt,
-        inputImage: dbJob.inputImage ?? undefined,
-        mode: dbJob.mode as 'draft' | 'final',
-        resolution: dbJob.resolution as '1K' | '2K' | '4K' | undefined,
-        aspectRatio: dbJob.aspectRatio as 'Auto' | '1:1' | '9:16' | '16:9' | '3:4' | '4:3' | '3:2' | '2:3' | '5:4' | '4:5' | '21:9' | undefined,
-        sampleCount: dbJob.sampleCount ?? undefined,
-        endpoint: providerKey.endpoint,
-      }, {
-        maxAttempts: 60,
-        intervalMs: 3000,
-        enableFallback: true,
-        fallbackEndpoints,
-      });
+      if (provider === 'jimeng') {
+        // ===== JIMENG (即梦AI via 火山方舟) =====
+        // 获取参考图：优先使用 referenceImages，兼容 inputImage
+        const referenceImages = (dbJob.referenceImages as string[]) || [];
+        const primaryImage = referenceImages[0] || dbJob.inputImage;
+        
+        result = await jimengGenerate({
+          apiKey: providerKey.secret,
+          prompt: dbJob.prompt,
+          inputImage: primaryImage ?? undefined,
+          referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
+          generationMode: (dbJob.generationMode as 'text_to_image' | 'image_to_image') || 'text_to_image',
+          resolution: dbJob.resolution as '1K' | '2K' | '4K' | undefined,
+          aspectRatio: dbJob.aspectRatio as '1:1' | '4:3' | '3:4' | '16:9' | '9:16' | '3:2' | '2:3' | '21:9' | '9:21' | undefined,
+          sampleCount: dbJob.sampleCount ?? undefined,
+          modelVersion: config.jimeng.model,
+        }, {
+          maxAttempts: 1,  // 火山方舟是同步API，不需要轮询
+          intervalMs: 0,
+        });
+      } else {
+        // ===== GEMINI =====
+        // Build fallback endpoints (all endpoints except current one)
+        const endpoints = getEndpointsByPriority();
+        const fallbackEndpoints = endpoints
+          .map(e => e.endpoint)
+          .filter(e => e !== providerKey.endpoint && !excludeEndpoints.includes(e));
+
+        result = await geminiGenerate({
+          apiKey: providerKey.secret,
+          prompt: dbJob.prompt,
+          inputImage: dbJob.inputImage ?? undefined,
+          mode: dbJob.mode as 'draft' | 'final',
+          resolution: dbJob.resolution as '1K' | '2K' | '4K' | undefined,
+          aspectRatio: dbJob.aspectRatio as 'Auto' | '1:1' | '9:16' | '16:9' | '3:4' | '4:3' | '3:2' | '2:3' | '5:4' | '4:5' | '21:9' | undefined,
+          sampleCount: dbJob.sampleCount ?? undefined,
+          endpoint: providerKey.endpoint,
+        }, {
+          maxAttempts: 60,
+          intervalMs: 3000,
+          enableFallback: true,
+          fallbackEndpoints,
+        });
+      }
 
       // ========== PROCESS RESULT ==========
       if (result.status === 'FAILED') {
         throw new Error(result.error || 'Generation failed');
+      }
+
+      if (!result.images || result.images.length === 0) {
+        throw new Error('No images generated');
       }
 
       // Store images in parallel with progressive updates
@@ -271,7 +308,7 @@ export const generateWorker = new Worker<GenerateJobData>(
 
       // Mark key and endpoint as successful
       await markKeySuccess(providerKey.id);
-      await markEndpointSuccess('gemini', result.endpoint || providerKey.endpoint);
+      await markEndpointSuccess(provider, result.endpoint || providerKey.endpoint);
 
       // ========== QUEUE WEBHOOK ==========
       if (tenant.webhookEnabled && tenant.webhookUrl && tenant.webhookSecret) {
@@ -331,10 +368,10 @@ export const generateWorker = new Worker<GenerateJobData>(
         // Find the endpoint for this key and mark endpoint failure
         const failedKey = await prisma.providerKey.findUnique({
           where: { id: keyId },
-          select: { endpoint: true },
+          select: { endpoint: true, provider: true },
         });
         if (failedKey) {
-          await markEndpointFailure('gemini', failedKey.endpoint, errorCode);
+          await markEndpointFailure(failedKey.provider, failedKey.endpoint, errorCode);
         }
       }
 
@@ -404,5 +441,6 @@ function getErrorCode(message: string): string {
   if (message.includes('TENANT_CONC_LIMIT')) return 'TENANT_CONC_LIMIT';
   if (message.includes('NO_PROVIDER_KEY')) return 'NO_PROVIDER_KEY';
   if (message.includes('GEMINI')) return 'PROVIDER_ERROR';
+  if (message.includes('JIMENG') || message.includes('Jimeng')) return 'PROVIDER_ERROR';
   return 'UNKNOWN_ERROR';
 }

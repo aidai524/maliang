@@ -40,7 +40,7 @@ model ProviderKey {
   @@index([provider, endpoint, enabled])
 }
 
-  model Job {
+model Job {
   id                String   @id @default(cuid())
   tenantId          String
   tenant            Tenant   @relation(fields: [tenantId], references: [id])
@@ -50,7 +50,10 @@ model ProviderKey {
   mode              String   @default("final")  // draft/final
 
   prompt            String
-  inputImage        String?  @db.Text // 参考图 Base64 数据（若有）
+  inputImage        String?  @db.Text // 主参考图 Base64（兼容旧 API）
+  referenceImages   Json?    // 多张参考图数组 ["data:image/...","data:image/..."]
+  generationMode    String   @default("text_to_image") // text_to_image / image_to_image
+  
   resultUrls        Json?
   errorCode         String?
   errorMessage      String?

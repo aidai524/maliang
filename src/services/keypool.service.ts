@@ -2,7 +2,7 @@ import { prisma } from '../db/prisma';
 import { redis } from '../queue/redis';
 import { checkKeyHealth, getInFlight } from './limiter.service';
 import { createLogger } from '../utils/logger';
-import { getEndpointConfig, getEndpointsForModel } from '../providers/gemini/endpoints';
+import { getEndpointConfig as getGeminiEndpointConfig } from '../providers/gemini/endpoints';
 
 const logger = createLogger('keypool');
 
@@ -114,8 +114,8 @@ export async function pickProviderKey(
         inFlight,
         cooldownUntil: 0,
         isPreferred: key.endpoint === preferredEndpoint,
-        // Check if this endpoint is preferred for the requested model
-        isModelPreferred: model ? isEndpointPreferredForModel(key.endpoint, model) : false,
+        // Check if this endpoint is preferred for the requested model (gemini only)
+        isModelPreferred: model ? isEndpointPreferredForModel(provider, key.endpoint, model) : false,
       });
     }
   }
@@ -177,10 +177,20 @@ export async function pickProviderKey(
 
 /**
  * Check if an endpoint is preferred for a specific model
+ * Note: This only applies to gemini provider currently
  */
-function isEndpointPreferredForModel(endpoint: string, model: string): boolean {
-  const config = getEndpointConfig(endpoint);
-  return config?.preferredModels?.includes(model) ?? false;
+function isEndpointPreferredForModel(provider: string, endpoint: string, model: string): boolean {
+  // Only gemini has endpoint preferences based on model
+  if (provider !== 'gemini') {
+    return false;
+  }
+  
+  try {
+    const config = getGeminiEndpointConfig(endpoint);
+    return config?.preferredModels?.includes(model) ?? false;
+  } catch {
+    return false;
+  }
 }
 
 /**

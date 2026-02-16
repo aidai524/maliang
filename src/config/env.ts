@@ -30,6 +30,10 @@ const envSchema = z.object({
   GEMINI_FALLBACK_MODEL: z.string().default('gemini-2.5-flash-image-preview'),
   GEMINI_ENABLE_FALLBACK: z.string().default('true'),
 
+  // Jimeng/Seedream API (火山方舟)
+  JIMENG_API_KEY: z.string().optional(),
+  JIMENG_MODEL: z.string().default('doubao-seedream-4-0-250828'),
+
   // Rate limits
   GLOBAL_RPM_LIMIT: z.string().default('1000'),
   GLOBAL_CONCURRENCY_LIMIT: z.string().default('200'),
@@ -74,6 +78,11 @@ export const config = {
     apiKey2: env.GEMINI_API_KEY_2,
     apiBase: env.GEMINI_API_BASE,
     model: env.GEMINI_MODEL,
+  },
+
+  jimeng: {
+    apiKey: env.JIMENG_API_KEY,
+    model: env.JIMENG_MODEL,
   },
 
   rateLimits: {

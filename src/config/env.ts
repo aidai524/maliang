@@ -15,8 +15,16 @@ const envSchema = z.object({
   R2_BUCKET_NAME: z.string().optional(),
   R2_PUBLIC_BASE_URL: z.string().optional(),
 
-  // Local Storage
-  STORAGE_TYPE: z.enum(['local', 'r2']).default('local'),
+  // Alibaba Cloud OSS (optional)
+  OSS_REGION: z.string().optional(),
+  OSS_ENDPOINT: z.string().optional(),
+  OSS_ACCESS_KEY_ID: z.string().optional(),
+  OSS_ACCESS_KEY_SECRET: z.string().optional(),
+  OSS_BUCKET_NAME: z.string().optional(),
+  OSS_PUBLIC_BASE_URL: z.string().optional(),
+
+  // Storage backend
+  STORAGE_TYPE: z.enum(['local', 'r2', 'oss']).default('local'),
   PUBLIC_BASE_URL: z.string().default('http://localhost:3000'),
 
   // Webhook
@@ -67,6 +75,15 @@ export const config = {
     secretAccessKey: env.R2_SECRET_ACCESS_KEY!,
     bucket: env.R2_BUCKET_NAME || 'images',
     publicBaseUrl: env.R2_PUBLIC_BASE_URL || '',
+  } : null,
+
+  oss: env.OSS_ENDPOINT ? {
+    region: env.OSS_REGION || 'oss-cn-hangzhou',
+    endpoint: env.OSS_ENDPOINT,
+    accessKeyId: env.OSS_ACCESS_KEY_ID!,
+    accessKeySecret: env.OSS_ACCESS_KEY_SECRET!,
+    bucket: env.OSS_BUCKET_NAME || 'images',
+    publicBaseUrl: env.OSS_PUBLIC_BASE_URL || '',
   } : null,
 
   webhook: {

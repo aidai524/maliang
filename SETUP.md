@@ -10,7 +10,7 @@
 - ✅ API Key Pool 管理（自动负载均衡 + 熔断）
 - ✅ Webhook 回调通知
 - ✅ Draft/Final 两种生成模式
-- ✅ Cloudflare R2 对象存储
+- ✅ Cloudflare R2 / 阿里云 OSS 对象存储（可配置二选一）
 - ✅ Prisma ORM + PostgreSQL
 - ✅ BullMQ + Redis 队列
 
@@ -39,12 +39,23 @@ GEMINI_API_KEY_2=your_second_api_key
 # 设置后，npm run init 会使用这个 key 而不是随机生成
 TEST_API_KEY=img_test_dev_123456789
 
-# Cloudflare R2 (可选，不配置则图片无法存储)
+# Cloudflare R2 (可选)
 R2_ACCOUNT_ID=your_account_id
 R2_ACCESS_KEY_ID=your_access_key
 R2_SECRET_ACCESS_KEY=your_secret_key
 R2_BUCKET_NAME=images
 R2_PUBLIC_BASE_URL=https://your-cdn-domain.com/
+
+# Alibaba Cloud OSS (可选)
+OSS_REGION=oss-cn-hangzhou
+OSS_ENDPOINT=https://oss-cn-hangzhou.aliyuncs.com
+OSS_ACCESS_KEY_ID=your_oss_access_key_id
+OSS_ACCESS_KEY_SECRET=your_oss_access_key_secret
+OSS_BUCKET_NAME=images
+OSS_PUBLIC_BASE_URL=https://your-oss-cdn-domain.com/
+
+# 存储后端选择：local | r2 | oss
+STORAGE_TYPE=r2
 ```
 
 ### 3. 启动 Docker 容器
@@ -216,6 +227,9 @@ src/
 | `REDIS_URL` | Redis 连接字符串 | `redis://localhost:6379` |
 | `GEMINI_API_KEY_1` | Gemini API Key 1 | - |
 | `GEMINI_API_KEY_2` | Gemini API Key 2 | - |
+| `STORAGE_TYPE` | 存储后端：`local`/`r2`/`oss` | `local` |
+| `R2_*` | Cloudflare R2 配置（当 `STORAGE_TYPE=r2`） | - |
+| `OSS_*` | 阿里云 OSS 配置（当 `STORAGE_TYPE=oss`） | - |
 | `TEST_API_KEY` | 测试用的固定 API Key（可选） | - |
 | `GLOBAL_RPM_LIMIT` | 全局 RPM 限制 | `1000` |
 | `GLOBAL_CONCURRENCY_LIMIT` | 全局并发限制 | `200` |

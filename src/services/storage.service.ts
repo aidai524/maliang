@@ -1,17 +1,20 @@
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import OSS from 'ali-oss';
 import { config } from '../config/env';
 import { StorageError } from '../utils/errors';
 import { createLogger } from '../utils/logger';
 import fs from 'fs/promises';
 import path from 'path';
+import { Readable } from 'stream';
 
 const logger = createLogger('storage');
 
-// Initialize S3 client for Cloudflare R2
-let s3Client: S3Client | null = null;
+// Initialize clients for remote object storage backends
+let r2Client: S3Client | null = null;
+let ossClient: OSS | null = null;
 
 if (config.r2) {
-  s3Client = new S3Client({
+  r2Client = new S3Client({
     endpoint: `https://${config.r2.accountId}.r2.cloudflarestorage.com`,
     region: 'auto',
     credentials: {
@@ -20,8 +23,17 @@ if (config.r2) {
     },
   });
   logger.info('R2 storage initialized');
-} else {
-  logger.info('R2 storage not configured, using local storage');
+}
+
+if (config.oss) {
+  ossClient = new OSS({
+    region: config.oss.region,
+    endpoint: config.oss.endpoint,
+    accessKeyId: config.oss.accessKeyId,
+    accessKeySecret: config.oss.accessKeySecret,
+    bucket: config.oss.bucket,
+  });
+  logger.info('OSS storage initialized');
 }
 
 const PUBLIC_DIR = path.join(process.cwd(), 'public');
@@ -90,7 +102,7 @@ async function putImageR2(
     filename?: string;
   } = {}
 ): Promise<StoredImage> {
-  if (!s3Client || !config.r2) {
+  if (!r2Client || !config.r2) {
     throw new StorageError('R2 storage not configured');
   }
 
@@ -107,7 +119,7 @@ async function putImageR2(
       ContentType: contentType,
     });
 
-    await s3Client.send(command);
+    await r2Client.send(command);
 
     const url = `${config.r2.publicBaseUrl}/${key}`;
 
@@ -118,6 +130,51 @@ async function putImageR2(
     logger.error('Failed to store image to R2', { error, key });
     throw new StorageError(`Failed to store image to R2: ${error}`);
   }
+}
+
+/**
+ * Store an image to Alibaba Cloud OSS and return its public URL
+ */
+async function putImageOss(
+  buffer: Buffer,
+  options: {
+    contentType?: string;
+    filename?: string;
+  } = {}
+): Promise<StoredImage> {
+  if (!ossClient || !config.oss) {
+    throw new StorageError('OSS storage not configured');
+  }
+
+  const { contentType = 'image/png', filename } = options;
+  const key = filename || `images/${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+  try {
+    await ossClient.put(key, buffer, {
+      headers: {
+        'Content-Type': contentType,
+      },
+    });
+
+    const url = `${config.oss.publicBaseUrl}/${key}`;
+    logger.info('Image stored to OSS', { key, url, size: buffer.length });
+    return { url, key, contentType };
+  } catch (error) {
+    logger.error('Failed to store image to OSS', { error, key });
+    throw new StorageError(`Failed to store image to OSS: ${error}`);
+  }
+}
+
+async function readStreamToBuffer(stream: Readable): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+
+  return new Promise((resolve, reject) => {
+    stream.on('data', (chunk) => {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    });
+    stream.on('end', () => resolve(Buffer.concat(chunks)));
+    stream.on('error', reject);
+  });
 }
 
 /**
@@ -132,13 +189,21 @@ export async function putImage(
 ): Promise<StoredImage> {
   if (config.storage.type === 'local') {
     return putImageLocal(buffer, options);
-  } else {
+  }
+
+  if (config.storage.type === 'r2') {
     return putImageR2(buffer, options);
   }
+
+  if (config.storage.type === 'oss') {
+    return putImageOss(buffer, options);
+  }
+
+  throw new StorageError(`Unsupported storage type: ${config.storage.type}`);
 }
 
 /**
- * Get an image from R2
+ * Get an image from configured storage backend
  */
 export async function getImage(key: string): Promise<{ buffer: Buffer; contentType: string }> {
   if (config.storage.type === 'local') {
@@ -147,32 +212,71 @@ export async function getImage(key: string): Promise<{ buffer: Buffer; contentTy
     return { buffer, contentType: 'image/png' };
   }
 
-  if (!s3Client || !config.r2) {
-    throw new StorageError('R2 storage not configured');
-  }
-
-  const bucket = config.r2.bucket;
-
-  try {
-    const command = new GetObjectCommand({
-      Bucket: bucket,
-      Key: key,
-    });
-
-    const response = await s3Client.send(command);
-
-    if (!response.Body) {
-      throw new StorageError('Empty response body');
+  if (config.storage.type === 'r2') {
+    if (!r2Client || !config.r2) {
+      throw new StorageError('R2 storage not configured');
     }
 
-    const buffer = Buffer.from(await response.Body.transformToByteArray());
-    const contentType = response.ContentType || 'image/png';
+    const bucket = config.r2.bucket;
 
-    return { buffer, contentType };
-  } catch (error) {
-    logger.error('Failed to get image', { error, key });
-    throw new StorageError(`Failed to get image: ${error}`);
+    try {
+      const command = new GetObjectCommand({
+        Bucket: bucket,
+        Key: key,
+      });
+
+      const response = await r2Client.send(command);
+
+      if (!response.Body) {
+        throw new StorageError('Empty response body');
+      }
+
+      const buffer = Buffer.from(await response.Body.transformToByteArray());
+      const contentType = response.ContentType || 'image/png';
+
+      return { buffer, contentType };
+    } catch (error) {
+      logger.error('Failed to get image from R2', { error, key });
+      throw new StorageError(`Failed to get image from R2: ${error}`);
+    }
   }
+
+  if (config.storage.type === 'oss') {
+    if (!ossClient) {
+      throw new StorageError('OSS storage not configured');
+    }
+
+    try {
+      const response = await ossClient.get(key);
+      const responseHeaders = response.res?.headers as
+        | Record<string, string | string[] | undefined>
+        | undefined;
+      const rawContentType = responseHeaders?.['content-type'];
+      const contentType = Array.isArray(rawContentType)
+        ? rawContentType[0] || 'image/png'
+        : rawContentType || 'image/png';
+
+      if (Buffer.isBuffer(response.content)) {
+        return { buffer: response.content, contentType };
+      }
+
+      if (typeof response.content === 'string') {
+        return { buffer: Buffer.from(response.content), contentType };
+      }
+
+      if (response.content instanceof Readable) {
+        const buffer = await readStreamToBuffer(response.content);
+        return { buffer, contentType };
+      }
+
+      throw new StorageError('Unsupported OSS response content type');
+    } catch (error) {
+      logger.error('Failed to get image from OSS', { error, key });
+      throw new StorageError(`Failed to get image from OSS: ${error}`);
+    }
+  }
+
+  throw new StorageError(`Unsupported storage type: ${config.storage.type}`);
 }
 
 /**

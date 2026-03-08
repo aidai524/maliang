@@ -8,19 +8,17 @@ export type CreateJobOptions = {
   tenantId: string;
   idempotencyKey?: string;
   prompt: string;
-  /** Base64 encoded image data (format: data:image/<type>;base64,<data>) - 兼容旧 API */
   inputImage?: string;
-  /** 多张参考图 */
   referenceImages?: string[];
-  /** 生成模式: text_to_image (文生图) | image_to_image (图生图) */
   generationMode?: 'text_to_image' | 'image_to_image';
   mode?: 'draft' | 'final';
-  resolution?: '1K' | '2K' | '4K';
-  aspectRatio?: 'Auto' | '1:1' | '9:16' | '16:9' | '3:4' | '4:3' | '3:2' | '2:3' | '5:4' | '4:5' | '21:9' | '9:21';
+  resolution?: '0.5K' | '1K' | '2K' | '4K';
+  aspectRatio?: string;
   sampleCount?: number;
-  maxAttempts?: number;
-  /** AI provider: gemini (default) or jimeng (即梦AI) */
   provider?: 'gemini' | 'jimeng';
+  model?: string;
+  maxAttempts?: number;
+  enableWebSearch?: boolean;
 };
 
 export type JobStatus = {
@@ -49,6 +47,8 @@ export async function createJob(options: CreateJobOptions) {
     sampleCount,
     maxAttempts = 4,
     provider = 'gemini',
+    model,
+    enableWebSearch = false,
   } = options;
 
   // Check for idempotency key duplicate
@@ -86,6 +86,8 @@ export async function createJob(options: CreateJobOptions) {
       aspectRatio,
       sampleCount,
       provider,
+      model,
+      enableWebSearch,
     },
   });
 

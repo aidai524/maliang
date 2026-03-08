@@ -240,10 +240,12 @@ export const generateWorker = new Worker<GenerateJobData>(
           prompt: dbJob.prompt,
           inputImage: dbJob.inputImage ?? undefined,
           mode: dbJob.mode as 'draft' | 'final',
-          resolution: dbJob.resolution as '1K' | '2K' | '4K' | undefined,
+          resolution: dbJob.resolution as '0.5K' | '1K' | '2K' | '4K' | undefined,
           aspectRatio: dbJob.aspectRatio as 'Auto' | '1:1' | '9:16' | '16:9' | '3:4' | '4:3' | '3:2' | '2:3' | '5:4' | '4:5' | '21:9' | undefined,
           sampleCount: dbJob.sampleCount ?? undefined,
           endpoint: providerKey.endpoint,
+          enableWebSearch: dbJob.enableWebSearch ?? undefined,
+          model: dbJob.model || config.gemini.model,
         }, {
           maxAttempts: 60,
           intervalMs: 3000,

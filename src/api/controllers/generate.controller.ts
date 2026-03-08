@@ -55,11 +55,13 @@ export const GenerateBodySchema = z.object({
   /** @deprecated 质量模式，建议使用 resolution 控制 */
   mode: z.enum(['draft', 'final']).optional(),
   
-  resolution: z.enum(['1K', '2K', '4K']).optional(),
+  resolution: z.enum(['0.5K', '1K', '2K', '4K']).optional(),
   aspectRatio: z.enum(['Auto', '1:1', '9:16', '16:9', '3:4', '4:3', '3:2', '2:3', '5:4', '4:5', '21:9', '9:21']).optional(),
   sampleCount: z.number().min(1).max(15).int().optional(),
   
-  /** AI provider: gemini (default) or jimeng (即梦AI) */
+  model: z.enum(['gemini-2.0-flash-exp-image-generation', 'gemini-2.5-flash-image-preview', 'gemini-3-pro-image-preview', 'gemini-3.1-flash-image-preview']).optional(),
+  enableWebSearch: z.boolean().optional(),
+  
   provider: z.enum(SUPPORTED_PROVIDERS).optional(),
 });
 
@@ -102,14 +104,16 @@ export async function generate(req: Request, res: Response): Promise<void> {
     tenantId: tenant.id,
     idempotencyKey,
     prompt: body.prompt,
-    inputImage: referenceImages[0],           // 主参考图（兼容）
-    referenceImages,                           // 所有参考图
-    generationMode,                            // 生成模式
+    inputImage: referenceImages[0],
+    referenceImages,
+    generationMode,
     mode: body.mode || 'final',
     resolution: body.resolution,
     aspectRatio: body.aspectRatio,
     sampleCount: body.sampleCount,
     provider,
+    model: body.model,
+    enableWebSearch: body.enableWebSearch,
   });
 
   // If job already existed (idempotency), return it

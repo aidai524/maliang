@@ -25,6 +25,7 @@ const envSchema = z.object({
 
   // Storage backend
   STORAGE_TYPE: z.enum(['local', 'r2', 'oss']).default('local'),
+  STORAGE_PUBLIC_BASE_URL: z.string().optional(),
   PUBLIC_BASE_URL: z.string().default('http://localhost:3000'),
 
   // Webhook
@@ -66,7 +67,11 @@ export const config = {
 
   storage: {
     type: env.STORAGE_TYPE,
-    publicBaseUrl: env.PUBLIC_BASE_URL,
+    // Unified public URL for all storage backends.
+    // Backward compatibility:
+    // 1) STORAGE_PUBLIC_BASE_URL (new, preferred)
+    // 2) PUBLIC_BASE_URL (legacy local/public URL)
+    publicBaseUrl: env.STORAGE_PUBLIC_BASE_URL || env.PUBLIC_BASE_URL,
   },
 
   r2: env.R2_ACCOUNT_ID ? {
@@ -74,7 +79,11 @@ export const config = {
     accessKeyId: env.R2_ACCESS_KEY_ID!,
     secretAccessKey: env.R2_SECRET_ACCESS_KEY!,
     bucket: env.R2_BUCKET_NAME || 'images',
-    publicBaseUrl: env.R2_PUBLIC_BASE_URL || '',
+    // Backward compatibility:
+    // 1) STORAGE_PUBLIC_BASE_URL (new, unified)
+    // 2) R2_PUBLIC_BASE_URL (legacy)
+    // 3) PUBLIC_BASE_URL (legacy fallback)
+    publicBaseUrl: env.STORAGE_PUBLIC_BASE_URL || env.R2_PUBLIC_BASE_URL || env.PUBLIC_BASE_URL || '',
   } : null,
 
   oss: env.OSS_ENDPOINT ? {
@@ -83,7 +92,11 @@ export const config = {
     accessKeyId: env.OSS_ACCESS_KEY_ID!,
     accessKeySecret: env.OSS_ACCESS_KEY_SECRET!,
     bucket: env.OSS_BUCKET_NAME || 'images',
-    publicBaseUrl: env.OSS_PUBLIC_BASE_URL || '',
+    // Backward compatibility:
+    // 1) STORAGE_PUBLIC_BASE_URL (new, unified)
+    // 2) OSS_PUBLIC_BASE_URL (legacy)
+    // 3) PUBLIC_BASE_URL (legacy fallback)
+    publicBaseUrl: env.STORAGE_PUBLIC_BASE_URL || env.OSS_PUBLIC_BASE_URL || env.PUBLIC_BASE_URL || '',
   } : null,
 
   webhook: {

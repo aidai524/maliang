@@ -44,6 +44,7 @@ R2_ACCOUNT_ID=your_account_id
 R2_ACCESS_KEY_ID=your_access_key
 R2_SECRET_ACCESS_KEY=your_secret_key
 R2_BUCKET_NAME=images
+# 旧变量，兼容保留；建议使用 STORAGE_PUBLIC_BASE_URL
 R2_PUBLIC_BASE_URL=https://your-cdn-domain.com/
 
 # Alibaba Cloud OSS (可选)
@@ -52,10 +53,14 @@ OSS_ENDPOINT=https://oss-cn-hangzhou.aliyuncs.com
 OSS_ACCESS_KEY_ID=your_oss_access_key_id
 OSS_ACCESS_KEY_SECRET=your_oss_access_key_secret
 OSS_BUCKET_NAME=images
+# 旧变量，兼容保留；建议使用 STORAGE_PUBLIC_BASE_URL
 OSS_PUBLIC_BASE_URL=https://your-oss-cdn-domain.com/
 
 # 存储后端选择：local | r2 | oss
 STORAGE_TYPE=r2
+
+# 统一公共访问域名（推荐，local/r2/oss 通用）
+STORAGE_PUBLIC_BASE_URL=https://your-public-domain.com
 ```
 
 ### 3. 启动 Docker 容器
@@ -228,6 +233,7 @@ src/
 | `GEMINI_API_KEY_1` | Gemini API Key 1 | - |
 | `GEMINI_API_KEY_2` | Gemini API Key 2 | - |
 | `STORAGE_TYPE` | 存储后端：`local`/`r2`/`oss` | `local` |
+| `STORAGE_PUBLIC_BASE_URL` | 统一公共访问域名（推荐） | - |
 | `R2_*` | Cloudflare R2 配置（当 `STORAGE_TYPE=r2`） | - |
 | `OSS_*` | 阿里云 OSS 配置（当 `STORAGE_TYPE=oss`） | - |
 | `TEST_API_KEY` | 测试用的固定 API Key（可选） | - |

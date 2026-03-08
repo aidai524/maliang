@@ -383,10 +383,18 @@
                         required: false
                     },
                     {
+                        name: 'model',
+                        type: 'select',
+                        label: 'Model (optional - defaults to env.GEMINI_MODEL)',
+                        options: ['', 'gemini-2.0-flash-exp-image-generation', 'gemini-2.5-flash-image-preview', 'gemini-3-pro-image-preview', 'gemini-3.1-flash-image-preview'],
+                        default: '',
+                        required: false
+                    },
+                    {
                         name: 'resolution',
                         type: 'select',
-                        label: 'Resolution (optional - not all models support)',
-                        options: ['', '1K', '2K', '4K'],
+                        label: 'Resolution (Gemini 3.1+ supports 0.5K/1K/2K/4K)',
+                        options: ['', '0.5K', '1K', '2K', '4K'],
                         default: '',
                         required: false
                     },
@@ -407,6 +415,14 @@
                         required: false,
                         min: 1,
                         max: 10
+                    },
+                    {
+                        name: 'enableWebSearch',
+                        type: 'select',
+                        label: 'Enable Web Search Grounding (Gemini 3.1+)',
+                        options: ['', 'true', 'false'],
+                        default: '',
+                        required: false
                     },
                     {
                         name: 'Idempotency-Key',
@@ -441,12 +457,29 @@
                         required: false
                     },
                     {
-                        name: 'limit',
+                        name: 'sampleCount',
                         type: 'number',
-                        label: 'Limit (1-100)',
-                        placeholder: '50',
-                        default: '50',
+                        label: 'Sample Count (optional, 1-15)',
+                        placeholder: '',
+                        default: '',
+                        required: false,
+                        min: 1,
+                        max: 15
+                    },
+                    {
+                        name: 'enableWebSearch',
+                        type: 'checkbox',
+                        label: 'Enable Web Search Grounding (Gemini 3.1+ only)',
+                        default: false,
                         required: false
+                    },
+                    {
+                        name: 'Idempotency-Key',
+                        type: 'text',
+                        label: 'Idempotency Key (header)',
+                        placeholder: 'client-request-id-12345',
+                        required: false,
+                        isHeader: true
                     }
                 ],
                 exampleResponse: {

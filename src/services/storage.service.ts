@@ -153,6 +153,7 @@ async function putImageOss(
     await ossClient.put(key, buffer, {
       headers: {
         'Content-Type': contentType,
+        'x-oss-object-acl': 'public-read',
       },
     });
 

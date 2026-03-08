@@ -46,13 +46,12 @@ function buildGeminiRequest(
   resolution?: GeminiResolution,
   aspectRatio?: GeminiAspectRatios,
   sampleCount?: number,
+  enableWebSearch?: boolean,
 ) {
-  // 构建 generationConfig
   const generationConfig: Record<string, any> = {
     responseModalities: ['TEXT', 'IMAGE'],
   };
 
-  // 设置图片配置（如果有指定）
   if (resolution || aspectRatio || sampleCount) {
     generationConfig.imageConfig = {};
     
@@ -67,6 +66,10 @@ function buildGeminiRequest(
     if (sampleCount && sampleCount > 1) {
       generationConfig.imageConfig.numberOfImages = sampleCount;
     }
+  }
+
+  if (enableWebSearch) {
+    generationConfig.enableWebSearch = true;
   }
 
   const parts: any[] = [];
@@ -127,6 +130,7 @@ export async function geminiSubmit(
     sampleCount, 
     model: optionModel,
     endpoint: optionEndpoint,
+    enableWebSearch,
   } = options;
 
   const endpoint = optionEndpoint || DEFAULT_ENDPOINT;
@@ -138,10 +142,10 @@ export async function geminiSubmit(
     mode || 'final',
     resolution,
     aspectRatio,
-    sampleCount
+    sampleCount,
+    enableWebSearch,
   );
 
-  // Build URL and headers based on endpoint configuration
   const { url, headers } = buildApiUrl(endpoint, model, apiKey);
 
   logger.info('Submitting to Gemini API', {
@@ -152,6 +156,7 @@ export async function geminiSubmit(
     resolution,
     aspectRatio,
     sampleCount,
+    enableWebSearch,
   });
 
   try {

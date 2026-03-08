@@ -34,6 +34,7 @@ export const GEMINI_ENDPOINTS: Record<string, EndpointConfig> = {
       'gemini-2.0-flash-exp-image-generation',
       'gemini-2.5-flash-image-preview',
       'gemini-3-pro-image-preview',
+      'gemini-3.1-flash-image-preview',
     ],
   },
   yunwu: {

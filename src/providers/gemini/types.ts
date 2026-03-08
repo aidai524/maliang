@@ -4,7 +4,7 @@
 
 export type GeminiMode = 'draft' | 'final';
 
-export type GeminiResolution = '1K' | '2K' | '4K';
+export type GeminiResolution = '0.5K' | '1K' | '2K' | '4K';
 
 export type GeminiAspectRatios = 'Auto' | '1:1' | '9:16' | '16:9' | '3:4' | '4:3' | '3:2' | '2:3' | '5:4' | '4:5' | '21:9';
 
@@ -13,7 +13,6 @@ export type GeminiEndpoint = 'official' | 'yunwu' | string;
 export type GeminiGenerateOptions = {
   apiKey: string;
   prompt: string;
-  /** Base64 encoded image data (format: data:image/<type>;base64,<data>) */
   inputImage?: string;
   mode?: GeminiMode;
   resolution?: GeminiResolution;
@@ -21,6 +20,7 @@ export type GeminiGenerateOptions = {
   sampleCount?: number;
   model?: string;
   endpoint?: GeminiEndpoint;
+  enableWebSearch?: boolean;
 };
 
 export type GeminiSubmitResult = {

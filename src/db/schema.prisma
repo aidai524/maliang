@@ -8,69 +8,71 @@ datasource db {
 }
 
 model Tenant {
-  id               String   @id @default(cuid())
-  name             String
-  apiKeyHash       String   @unique
-  planRpm          Int      @default(60)
-  planConcurrency  Int      @default(5)
+  id              String @id @default(cuid())
+  name            String
+  apiKeyHash      String @unique
+  planRpm         Int    @default(60)
+  planConcurrency Int    @default(5)
 
-  webhookUrl       String?
-  webhookSecret    String?
-  webhookEnabled   Boolean  @default(false)
+  webhookUrl     String?
+  webhookSecret  String?
+  webhookEnabled Boolean @default(false)
 
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  jobs             Job[]
+  jobs Job[]
 }
 
 model ProviderKey {
-  id               String   @id @default(cuid())
-  provider         String   // "gemini" / "nanobanana"
-  endpoint         String   @default("official")  // "official" / "yunwu" / etc.
+  id               String  @id @default(cuid())
+  provider         String // "gemini" / "nanobanana"
+  endpoint         String  @default("official") // "official" / "yunwu" / etc.
   encryptedKey     String
-  rpmLimit         Int      @default(60)
-  concurrencyLimit Int      @default(2)
-  priority         Int      @default(1)  // Lower number = higher priority
-  enabled          Boolean  @default(true)
+  rpmLimit         Int     @default(60)
+  concurrencyLimit Int     @default(2)
+  priority         Int     @default(1) // Lower number = higher priority
+  enabled          Boolean @default(true)
 
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([provider, endpoint, enabled])
 }
 
 model Job {
-  id                String   @id @default(cuid())
-  tenantId          String
-  tenant            Tenant   @relation(fields: [tenantId], references: [id])
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
 
-  idempotencyKey    String?
-  status            String   @default("QUEUED") // QUEUED/RUNNING/SUCCEEDED/FAILED/RETRYING/CANCELED
-  mode              String   @default("final")  // draft/final
+  idempotencyKey String?
+  status         String  @default("QUEUED") // QUEUED/RUNNING/SUCCEEDED/FAILED/RETRYING/CANCELED
+  mode           String  @default("final") // draft/final
 
-  prompt            String
-  inputImage        String?  @db.Text // 主参考图 Base64（兼容旧 API）
-  referenceImages   Json?    // 多张参考图数组 ["data:image/...","data:image/..."]
-  generationMode    String   @default("text_to_image") // text_to_image / image_to_image
-  
-  resultUrls        Json?
-  errorCode         String?
-  errorMessage      String?
+  prompt          String
+  inputImage      String? @db.Text // 主参考图 Base64（兼容旧 API）
+  referenceImages Json? // 多张参考图数组 ["data:image/...","data:image/..."]
+  generationMode  String  @default("text_to_image") // text_to_image / image_to_image
 
-  attempts          Int      @default(0)
-  maxAttempts       Int      @default(4)
+  resultUrls   Json?
+  errorCode    String?
+  errorMessage String?
 
-  provider          String   @default("gemini")
+  attempts    Int @default(0)
+  maxAttempts Int @default(4)
+
+  provider          String  @default("gemini")
   providerKeyId     String?
-  providerRequestId String?  // Gemini async operation name/id
+  providerRequestId String? // Gemini async operation name/id
 
-  resolution        String?   // 1K, 2K, 4K - optional, not all models support it
-  aspectRatio       String?   // Auto, 1:1, 9:16, 16:9, 3:4, 4:3, 3:2, 2:3, 5:4, 4:5, 21:9 - optional
-  sampleCount       Int?      // Number of images to generate - optional
+  resolution      String? // 0.5K, 1K, 2K, 4K - optional, not all models support it
+  aspectRatio     String? // Auto, 1:1, 9:16, 16:9, 3:4, 4:3, 3:2, 2:3, 5:4, 4:5, 21:9 - optional
+  sampleCount     Int? // Number of images to generate - optional
+  model           String? // Model to use - optional, defaults to env.GEMINI_MODEL
+  enableWebSearch Boolean @default(false) // Enable web search grounding (Gemini 3.1+)
 
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([tenantId, idempotencyKey])
   @@index([tenantId, status])
